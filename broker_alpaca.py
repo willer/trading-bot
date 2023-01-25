@@ -9,7 +9,6 @@ from alpaca.data.requests import StockLatestQuoteRequest
 from broker_root import broker_root
 
 alpacaconn_cache = {}
-stock_cache = {}
 ticker_cache = {}
 
 class StockStub:
@@ -50,31 +49,27 @@ class broker_alpaca(broker_root):
             print("Alpaca: Connected")
 
     def get_stock(self, symbol):
-        if symbol in stock_cache:
-            stock = stock_cache[symbol]
+        # normalization of the symbol, from TV to Alpaca form
+        stock = StockStub(symbol)
+        if symbol == 'NQ1!':
+            stock.is_futures = 1
+        elif symbol == 'ES1!':
+            stock.is_futures = 1
+        elif symbol == 'RTY1!':
+            stock.is_futures = 1
+        elif symbol == 'CL1!':
+            stock.is_futures = 1
+        elif symbol == 'NG1!':
+            stock.is_futures = 1
+        elif symbol == 'HG1!':
+            stock.is_futures = 1
+        elif symbol == '6J1!':
+            stock.is_futures = 1
+        elif symbol == 'HEN2022':
+            stock.is_futures = 1
         else:
-            # normalization of the symbol, from TV to Alpaca form
-            stock = StockStub(symbol)
-            if symbol == 'NQ1!':
-                stock.is_futures = 1
-            elif symbol == 'ES1!':
-                stock.is_futures = 1
-            elif symbol == 'RTY1!':
-                stock.is_futures = 1
-            elif symbol == 'CL1!':
-                stock.is_futures = 1
-            elif symbol == 'NG1!':
-                stock.is_futures = 1
-            elif symbol == 'HG1!':
-                stock.is_futures = 1
-            elif symbol == '6J1!':
-                stock.is_futures = 1
-            elif symbol == 'HEN2022':
-                stock.is_futures = 1
-            else:
-                stock.is_futures = 0
+            stock.is_futures = 0
 
-            stock_cache[symbol] = stock
         return stock
 
     def get_price(self, symbol):

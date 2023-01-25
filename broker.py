@@ -111,13 +111,19 @@ async def check_messages():
                     raise Exception("Unknown driver: " + aconfig['driver'])
 
                 # set up variables for this account, normalizing market position to be positive or negative based on long or short
+                # also check for futures before even checking price, as Alpaca doesn't support them at all
+                order_symbol = order_symbol_orig
                 desired_position = market_position_size_orig
                 if market_position_orig == "short": desired_position = -market_position_size_orig
-                order_symbol = order_symbol_orig
-                order_price = driver.get_price(order_symbol)
-                order_stock = driver.get_stock(order_symbol)
+                print(f"** WORKING ON TRADE for account {account} symbol {order_symbol} to position {desired_position}")
 
-                print(f"** WORKING ON TRADE for account {account} symbol {order_symbol} to position {desired_position} at price {order_price}")
+                # check for futures permissions (default is allow)
+                order_stock = driver.get_stock(order_symbol)
+                if order_stock.is_futures and aconfig.get('use-futures', 'yes') == 'no':
+                    print("this account doesn't allow futures; skipping")
+                    continue
+
+                order_price = driver.get_price(order_symbol)
 
                 # if it's a long-short transition or going flat, we sell out of our position
                 current_position = driver.get_position_size(order_symbol)
@@ -158,7 +164,7 @@ async def check_messages():
                     print(f"using account specific net liquidity {percent}% for {order_symbol}: {desired_position} -> {new_desired_position}")
                     desired_position = new_desired_position
                 else:
-                    print(f"not using account specific net liquidity: {order_stock.is_futures} {desired_position} {f'{order_symbol} pct' in aconfig}")
+                    print(f"not using account specific net liquidity: is_futures={order_stock.is_futures} desired_position={desired_position} pctconfig={f'{order_symbol} pct' in aconfig}")
 
                 # check for security conversion (generally futures to ETF); format is "mult x ETF"
                 if order_symbol_orig in aconfig:
@@ -178,11 +184,6 @@ async def check_messages():
                 if not order_stock.is_futures and aconfig.get("multiplier", "") != "":
                     print("multiplying position by ",float(aconfig["multiplier"]))
                     desired_position = round(desired_position * float(aconfig["multiplier"]))
-
-                # check for futures permissions (default is allow)
-                if order_stock.is_futures and aconfig.get('use-futures', 'yes') == 'no':
-                    print("this account doesn't allow futures; skipping")
-                    continue
 
                 # switch from short a long ETF to long a short ETF, if this account needs it
                 if desired_position < 0 and aconfig.get('use-inverse-etf', 'no') == 'yes':

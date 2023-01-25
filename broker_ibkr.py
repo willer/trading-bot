@@ -139,10 +139,10 @@ class broker_ibkr(broker_root):
 
     def get_position_size(self, symbol):
         # get the current position size
-        # TODO: compare with normalized stock name
+        stock = self.get_stock(symbol)
         psize = 0
         for p in self.conn.positions(self.account):
-            if p.contract.symbol == symbol:
+            if p.contract.symbol == stock.symbol:
                 psize = int(p.position)
 
         print(f"  get_position_size({symbol}) -> {psize}")
