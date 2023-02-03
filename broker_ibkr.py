@@ -69,7 +69,7 @@ class broker_ibkr(broker_root):
                 stock.round_precision = 10
             elif symbol == 'CL1!':
                 symbol = 'CL'
-                stock = Future(symbol, '20221220', 'NYMEX')
+                stock = Future(symbol, '20230127', 'NYMEX')
                 stock.is_futures = 1
                 stock.round_precision = 10
             elif symbol == 'NG1!':
@@ -184,9 +184,11 @@ class broker_ibkr(broker_root):
                 print("    waiting for trade2: ", trade)
                 maxloops -= 1
 
+            await asyncio.sleep(1)
+
             # throw exception on order failure
             if trade.orderStatus.status not in ['Filled']:
-                msg = f"ORDER FAILED: set_position_size({self.account},{symbol},{stock},{amount},{stock.round_precision}) -> {trade.orderStatus}"
+                msg = f"ORDER FAILED in status {trade.orderStatus.status}: set_position_size({self.account},{symbol},{stock},{amount},{stock.round_precision}) -> {trade.orderStatus}"
                 print(msg)
                 self.handle_ex(msg)
 

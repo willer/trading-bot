@@ -79,7 +79,11 @@ async def check_messages():
             return
 
         try:
-            data_dict = json.loads(message['data'])
+            try:
+                data_dict = json.loads(message['data'])
+            except Exception as e:
+                print("Error loading json: ",e)
+                return
 
             if 'bot' not in data_dict['strategy']:
                 raise Exception("You need to indicate the bot in the strategy portion of the json payload")
