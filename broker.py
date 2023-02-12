@@ -179,11 +179,6 @@ async def check_messages():
                     order_stock = driver.get_stock(order_symbol)
                     order_price = driver.get_price(order_symbol)
 
-                # check for global multipliers, vs whatever position sizes are coming in from TV
-                if not order_stock.is_futures and "multiplier" in config['DEFAULT'] and config['DEFAULT']["multiplier"] != "":
-                    print("multiplying position by ",float(config['DEFAULT']["multiplier"]))
-                    desired_position = round(desired_position * float(config['DEFAULT']["multiplier"]))
-
                 # check for overall multipliers on the account, vs whatever position sizes are coming in from TV
                 if not order_stock.is_futures and aconfig.get("multiplier", "") != "":
                     print("multiplying position by ",float(aconfig["multiplier"]))

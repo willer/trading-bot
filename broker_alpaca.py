@@ -158,7 +158,7 @@ class broker_alpaca(broker_root):
 
             # throw exception on order failure
             if trade.status not in ['filled']:
-                msg = f"ORDER FAILED: set_position_size({symbol},{amount}) acct {self.account} -> {trade.orderStatus}"
+                msg = f"ORDER FAILED: set_position_size({symbol},{amount}) acct {self.account} -> {trade.status}"
                 print(msg)
                 self.handle_ex(msg)
 
