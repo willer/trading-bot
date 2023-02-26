@@ -1,11 +1,13 @@
 import asyncio
+import datetime
 import time
 import configparser
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import LimitOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
 from alpaca.data.historical import StockHistoricalDataClient
-from alpaca.data.requests import StockLatestQuoteRequest
+from alpaca.data.requests import StockLatestQuoteRequest, StockBarsRequest
+from alpaca.data.timeframe import TimeFrame
 from broker_root import broker_root
 import yfinance as yf
 
@@ -170,24 +172,18 @@ class broker_alpaca(broker_root):
             raise Exception("Can only use blank end date")
         if timeframe != "1 day":
             raise Exception("Can only use 1 day timeframe")
+        if 'Y' not in duration:
+            raise Exception("Can only use years in duration, in IB format like '5 Y'")
 
-        yf.pdr_override()
+        duration_years = int(duration.split(' ')[0])
+        start = datetime.datetime.now() - datetime.timedelta(days=duration_years*365)
 
-        df = yf.Ticker(symbol)
-        df = df.history(period="max")
-        try: del df["Dividends"]
-        except: pass
-        try: del df["Stock Splits"]
-        except: pass
-        try: del df["Capital Gains"]
-        except: pass
-        try: del df["Adj Close"]
-        except: pass
-        # if it's NDX, fill Volume column with data from QQQ
-        if symbol == 'NDX':
-            df['Volume'] = yf.Ticker('QQQ').history(period="max")['Volume']
+        request_params = StockBarsRequest(symbol_or_symbols=symbol, 
+            start=start.strftime("%Y-%m-%d"), 
+            timeframe = TimeFrame.Day)
 
-        return df
+        bars = self.dataconn.get_stock_bars(request_params)
+        return bars.df
 
     def health_check(self):
         self.get_net_liquidity()
