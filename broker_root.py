@@ -38,5 +38,8 @@ class broker_root:
     async def set_position_size(self, symbol, amount):
         pass
 
+    def download_data(self, symbol, end, duration, timeframe):
+        pass
+
     def health_check(self):
         pass

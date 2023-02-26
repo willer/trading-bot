@@ -7,6 +7,7 @@ from alpaca.trading.enums import OrderSide, TimeInForce
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockLatestQuoteRequest
 from broker_root import broker_root
+import yfinance as yf
 
 alpacaconn_cache = {}
 ticker_cache = {}
@@ -164,6 +165,29 @@ class broker_alpaca(broker_root):
 
             print("order filled")
 
+    def download_data(self, symbol, end, duration, timeframe, cachedata=False):
+        if end != "":
+            raise Exception("Can only use blank end date")
+        if timeframe != "1 day":
+            raise Exception("Can only use 1 day timeframe")
+
+        yf.pdr_override()
+
+        df = yf.Ticker(symbol)
+        df = df.history(period="max")
+        try: del df["Dividends"]
+        except: pass
+        try: del df["Stock Splits"]
+        except: pass
+        try: del df["Capital Gains"]
+        except: pass
+        try: del df["Adj Close"]
+        except: pass
+        # if it's NDX, fill Volume column with data from QQQ
+        if symbol == 'NDX':
+            df['Volume'] = yf.Ticker('QQQ').history(period="max")['Volume']
+
+        return df
 
     def health_check(self):
         self.get_net_liquidity()

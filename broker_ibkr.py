@@ -1,9 +1,13 @@
 import asyncio
+import datetime
+import os
 from ib_insync import *
 import time
 import nest_asyncio
 import configparser
 import math
+
+import pandas as pd
 from broker_root import broker_root
 
 nest_asyncio.apply()
@@ -22,6 +26,7 @@ class broker_ibkr(broker_root):
         self.aconfig = self.config[account]
         self.conn = None
 
+    def load_conn(self):
         # pick up a cached IB connection if it exists
         ibcachekey = f"{self.aconfig['host']}:{self.aconfig['port']}"
         if ibcachekey in ibconn_cache:
@@ -31,16 +36,26 @@ class broker_ibkr(broker_root):
             self.conn = IB()
             try:
                 print(f"IB: Trying to connect...")
-                self.conn.connect(self.aconfig['host'], self.aconfig['port'], clientId=1)
+                self.conn.connect(self.aconfig['host'], self.aconfig['port'], clientId=2)
             except Exception as e:
-                self.handle_ex(e)
-                raise
+                try:
+                    self.conn.connect(self.aconfig['host'], self.aconfig['port'], clientId=3)
+                except Exception as e:
+                    try:
+                        self.conn.connect(self.aconfig['host'], self.aconfig['port'], clientId=4)
+                    except Exception as e:
+                        try:
+                            self.conn.connect(self.aconfig['host'], self.aconfig['port'], clientId=5)
+                        except Exception as e:
+                            self.handle_ex(e)
+                            raise
 
             # cache the connection
             ibconn_cache[ibcachekey] = {'conn': self.conn, 'time': time.time()}
             print("IB: Connected")
 
     def get_stock(self, symbol):
+        self.load_conn()
         # keep a cache of stocks to avoid repeated calls to IB
         if symbol in stock_cache:
             stock = stock_cache[symbol]
@@ -52,48 +67,64 @@ class broker_ibkr(broker_root):
                 symbol = 'BRK/A'
 
 
-            if symbol == 'NQ1!':
+            if symbol == 'NQ1!' or symbol == 'NQ':
                 symbol = 'NQ'
                 stock = Future(symbol, '20230317', 'CME')
                 stock.is_futures = 1
                 stock.round_precision = 4
-            elif symbol == 'ES1!':
+            elif symbol == 'ES1!' or symbol == 'ES':
                 symbol = 'ES'
                 stock = Future(symbol, '20230317', 'CME')
                 stock.is_futures = 1
                 stock.round_precision = 4
-            elif symbol == 'RTY1!':
+            elif symbol == 'RTY1!' or symbol == 'RTY':
                 symbol = 'RTY'
                 stock = Future(symbol, '20221216', 'CME')
                 stock.is_futures = 1
                 stock.round_precision = 10
-            elif symbol == 'CL1!':
+            elif symbol == 'CL1!' or symbol == 'CL':
                 symbol = 'CL'
                 stock = Future(symbol, '20230127', 'NYMEX')
                 stock.is_futures = 1
                 stock.round_precision = 10
-            elif symbol == 'NG1!':
+            elif symbol == 'NG1!' or symbol == 'NG':
                 symbol = 'NG'
                 stock = Future(symbol, '20221220', 'NYMEX')
                 stock.is_futures = 1
                 stock.round_precision = 10
-            elif symbol == 'HG1!':
+            elif symbol == 'HG1!' or symbol == 'HG':
                 symbol = 'HG'
                 stock = Future(symbol, '20220928', 'NYMEX')
                 stock.is_futures = 1
                 stock.round_precision = 10
-            elif symbol == '6J1!':
+            elif symbol == '6J1!' or symbol == '6J':
                 symbol = 'J7'
                 stock = Future(symbol, '20220919', 'GLOBEX')
                 stock.is_futures = 1
                 stock.round_precision = 10
-            elif symbol == 'HEN2022':
+            elif symbol == 'HEN2022' or symbol == 'HE':
                 symbol = 'HE'
                 stock = Future(symbol, '20220715', 'NYMEX')
                 stock.is_futures = 1
                 stock.round_precision = 10
             elif symbol in ['HXU', 'HXD', 'HQU', 'HQD', 'HEU', 'HED', 'HSU', 'HSD', 'HGU', 'HGD', 'HBU', 'HBD', 'HNU', 'HND', 'HOU', 'HOD', 'HCU', 'HCD']:
                 stock = Stock(symbol, 'SMART', 'CAD')
+                stock.is_futures = 0
+                stock.round_precision = 100
+            elif symbol == 'NDX':
+                stock = Index(symbol, 'NASDAQ')
+                stock.is_futures = 0
+                stock.round_precision = 100
+            elif symbol == 'VIX':
+                stock = Index(symbol, 'CBOE')
+                stock.is_futures = 0
+                stock.round_precision = 100
+            elif symbol == 'BRK-B' or symbol == 'BRK/B' or symbol == 'BRK.B':
+                stock = Index('BRK B', 'NYSE', 'USD')
+                stock.is_futures = 0
+                stock.round_precision = 100
+            elif symbol == 'JETS':
+                stock = Index('JETS', 'NYSE')
                 stock.is_futures = 0
                 stock.round_precision = 100
             else:
@@ -105,6 +136,7 @@ class broker_ibkr(broker_root):
         return stock
 
     def get_price(self, symbol):
+        self.load_conn()
         stock = self.get_stock(symbol)
 
         # keep a cache of tickers to avoid repeated calls to IB, but only for 5s
@@ -125,6 +157,7 @@ class broker_ibkr(broker_root):
         return price
 
     def get_net_liquidity(self):
+        self.load_conn()
         # get the current net liquidity
         net_liquidity = 0
         accountSummary = self.conn.accountSummary(self.account)
@@ -138,6 +171,7 @@ class broker_ibkr(broker_root):
         return net_liquidity
 
     def get_position_size(self, symbol):
+        self.load_conn()
         # get the current position size
         stock = self.get_stock(symbol)
         psize = 0
@@ -150,6 +184,7 @@ class broker_ibkr(broker_root):
 
     async def set_position_size(self, symbol, amount):
         print(f"set_position_size({self.account},{symbol},{amount})")
+        self.load_conn()
         stock = self.get_stock(symbol)
 
         # get the current position size
@@ -193,6 +228,74 @@ class broker_ibkr(broker_root):
                 self.handle_ex(msg)
 
             print("order filled")
+
+    def download_data(self, symbol, end, duration, barlength, cachedata=False):
+        print(f"download_data({symbol},{end},{duration},{barlength})")
+
+        cachefile = f"cache/stockdata-{symbol}-{end.replace(' ','_')}-{duration.replace(' ','_')}-{barlength}.pkl"
+
+        # check if we have a cached version of the data and it's not more than 1h old
+        if cachedata and os.path.exists(cachefile) and time.time() - os.path.getmtime(cachefile) < 3600:
+            print("  loading cached data")
+            df = pd.read_pickle(cachefile)
+            return df
+
+        self.load_conn()
+        stock = self.get_stock(symbol)
+
+        # request historical bars
+        useRTH = False
+        if 'day' in barlength or 'week' in barlength or 'month' in barlength:
+            useRTH = True
+
+        bars = self.conn.reqHistoricalData(
+            stock,
+            endDateTime=end,
+            durationStr=duration,
+            barSizeSetting=barlength,
+            whatToShow='TRADES',
+            useRTH=useRTH,
+            formatDate=1,
+            timeout = 300
+        )
+        # convert to df, and rename columns from 'open' to 'Open' etc to make it look like Yahoo data
+        df = util.df(bars,labels=['date','open','high','low','close','volume'])
+        df.columns = [c.capitalize() for c in df.columns]
+        # make the date column the index
+        df.set_index('Date', inplace=True)
+        # convert date to pandas timestamp
+        df.index = pd.to_datetime(df.index)
+
+        # clear out last line if it's a partial bar
+        # (IB gives us partial bars and doesn't identify them as such even though they have no )
+        nowispastRTH = datetime.datetime.now().time() > datetime.time(16,0,0)
+        nowispastETH = datetime.datetime.now().time() > datetime.time(20,0,0)
+        if 'day' in barlength:
+            if not nowispastRTH:
+                df = df[:-1]
+        elif 'week' in barlength:
+            pass
+        elif 'month' in barlength:
+            pass
+        elif 'hour' in barlength:
+            if not nowispastETH:
+                df = df[:-1]
+        elif 'min' in barlength:
+            if not nowispastETH:
+                df = df[:-1]
+
+        # special case: NDX doesn't give us volume, so we have to pick it up from QQQ
+        if (symbol == 'NDX'):
+            df['Volume'] = self.download_data('QQQ', end, duration, barlength)['Volume']
+
+        print(f"  download_data({symbol},{end},{duration},{barlength}) -> {len(bars)} bars")
+
+        if cachedata:
+            # cache the data
+            df.to_pickle(cachefile)
+
+        return df
+
 
     def health_check(self):
         self.get_net_liquidity()
