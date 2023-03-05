@@ -129,6 +129,10 @@ async def check_messages():
 
                 order_price = driver.get_price(order_symbol)
 
+                if order_price == 0:
+                    print("*** PRICE IS 0, SKIPPING")
+                    continue
+
                 # if it's a long-short transition or going flat, we sell out of our position
                 current_position = driver.get_position_size(order_symbol)
                 if (desired_position < 0 and current_position > 0) or desired_position == 0:
