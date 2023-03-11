@@ -133,21 +133,16 @@ async def check_messages():
                     print("*** PRICE IS 0, SKIPPING")
                     continue
 
-                # if it's a long-short transition or going flat, we sell out of our position
-                current_position = driver.get_position_size(order_symbol)
-                if (desired_position < 0 and current_position > 0) or desired_position == 0:
-                    print("L-S/goflat going flat")
-                    await driver.set_position_size(order_symbol, 0)
-
-                # if it's a short-long transition or going flat, we sell out of the short position
-                if (desired_position > 0 and current_position < 0) or desired_position == 0:
-                    print("S-L/goflat going flat")
-                    await driver.set_position_size(order_symbol, 0)
-                    # if this account needs to use short ETF's, flatten that one as well
-                    if aconfig.get('use-inverse-etf', 'no') == 'yes':
+                # if this account needs different ETF's for short vs long, close the other side
+                # or both if we're going flat
+                if aconfig.get('use-inverse-etf', 'no') == 'yes':
+                    if desired_position >= 0:
                         short_symbol = config['inverse-etfs'][order_symbol]
                         await driver.set_position_size(short_symbol, 0)
+                    if desired_position <= 0:
+                        await driver.set_position_size(order_symbol, 0)
 
+                current_position = driver.get_position_size(order_symbol)
 
                 # check for account and security specific percentage of net liquidity in config
                 # (if it's not a goflat order)
