@@ -36,7 +36,7 @@ class broker_ibkr(broker_root):
             self.conn = IB()
             try:
                 print(f"IB: Trying to connect...")
-                self.conn.connect(self.aconfig['host'], self.aconfig['port'], clientId=2)
+                self.conn.connect(self.aconfig['host'], self.aconfig['port'], clientId=1)
             except Exception as e:
                 try:
                     self.conn.connect(self.aconfig['host'], self.aconfig['port'], clientId=3)
@@ -66,45 +66,70 @@ class broker_ibkr(broker_root):
             elif symbol == 'BRK.A':
                 symbol = 'BRK/A'
 
-
-            if symbol == 'NQ1!' or symbol == 'NQ':
+            # TV-style NQ1! symbols are used for trading; IB-style like NQ are used for historical data
+            if symbol == 'NQ1!':
                 symbol = 'NQ'
-                stock = Future(symbol, '20230317', 'CME')
+                stock = Future(symbol, '20230616', 'CME')
                 stock.is_futures = 1
                 stock.round_precision = 4
-            elif symbol == 'ES1!' or symbol == 'ES':
+            elif symbol == 'NQ':
+                symbol = 'NQ'
+                stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
+                stock.is_futures = 1
+                stock.round_precision = 4
+            elif symbol == 'ES1!':
                 symbol = 'ES'
-                stock = Future(symbol, '20230317', 'CME')
+                stock = Future(symbol, '20230616', 'CME')
                 stock.is_futures = 1
                 stock.round_precision = 4
-            elif symbol == 'RTY1!' or symbol == 'RTY':
+            elif symbol == 'ES':
+                symbol = 'ES'
+                stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
+                stock.is_futures = 1
+                stock.round_precision = 4
+            elif symbol == 'RTY1!':
                 symbol = 'RTY'
-                stock = Future(symbol, '20221216', 'CME')
+                stock = Future(symbol, '20230616', 'CME')
                 stock.is_futures = 1
-                stock.round_precision = 10
-            elif symbol == 'CL1!' or symbol == 'CL':
+                stock.round_precision = 4
+            elif symbol == 'RTY':
+                symbol = 'RTY'
+                stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
+                stock.is_futures = 1
+                stock.round_precision = 4
+            elif symbol == 'CL1!':
                 symbol = 'CL'
-                stock = Future(symbol, '20230127', 'NYMEX')
+                stock = Future(symbol, '20230420', 'NYMEX')
                 stock.is_futures = 1
                 stock.round_precision = 10
-            elif symbol == 'NG1!' or symbol == 'NG':
+            elif symbol == 'CL':
+                symbol = 'CL'
+                stock = Contract(symbol=symbol, secType='CONTFUT', exchange='NYMEX', includeExpired=True)
+                stock.is_futures = 1
+                stock.round_precision = 10
+            elif symbol == 'NG1!':
                 symbol = 'NG'
-                stock = Future(symbol, '20221220', 'NYMEX')
+                stock = Future(symbol, '20230420', 'NYMEX')
+                stock.is_futures = 1
+                stock.round_precision = 10
+            elif symbol == 'NG':
+                symbol = 'NG'
+                stock = Contract(symbol=symbol, secType='CONTFUT', exchange='NYMEX', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 10
             elif symbol == 'HG1!' or symbol == 'HG':
                 symbol = 'HG'
-                stock = Future(symbol, '20220928', 'NYMEX')
+                stock = Contract(symbol=symbol, secType='CONTFUT', exchange='COMEX', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 10
-            elif symbol == '6J1!' or symbol == '6J':
+            elif symbol == '6J1!' or symbol == '6J' or symbol == 'J7':
                 symbol = 'J7'
-                stock = Future(symbol, '20220919', 'GLOBEX')
+                stock = Contract(symbol=symbol, secType='CONTFUT', exchange='GLOBEX', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 10
             elif symbol == 'HEN2022' or symbol == 'HE':
                 symbol = 'HE'
-                stock = Future(symbol, '20220715', 'NYMEX')
+                stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 10
             elif symbol in ['HXU', 'HXD', 'HQU', 'HQD', 'HEU', 'HED', 'HSU', 'HSD', 'HGU', 'HGD', 'HBU', 'HBD', 'HNU', 'HND', 'HOU', 'HOD', 'HCU', 'HCD']:
@@ -125,6 +150,10 @@ class broker_ibkr(broker_root):
                 stock.round_precision = 100
             elif symbol == 'JETS':
                 stock = Index('JETS', 'NYSE')
+                stock.is_futures = 0
+                stock.round_precision = 100
+            elif symbol == 'WEAT':
+                stock = Index('WEAT', 'NYSE')
                 stock.is_futures = 0
                 stock.round_precision = 100
             else:
@@ -267,22 +296,28 @@ class broker_ibkr(broker_root):
         df.index = pd.to_datetime(df.index)
 
         # clear out last line if it's a partial bar
-        # (IB gives us partial bars and doesn't identify them as such even though they have no )
-        nowispastRTH = datetime.datetime.now().time() > datetime.time(16,0,0)
-        nowispastETH = datetime.datetime.now().time() > datetime.time(20,0,0)
-        if 'day' in barlength:
-            if not nowispastRTH:
-                df = df[:-1]
-        elif 'week' in barlength:
-            pass
-        elif 'month' in barlength:
-            pass
-        elif 'hour' in barlength:
-            if not nowispastETH:
-                df = df[:-1]
-        elif 'min' in barlength:
-            if not nowispastETH:
-                df = df[:-1]
+        # (IB gives us partial bars and doesn't identify them as such)
+        if not stock.is_futures:
+            nowisinRTH = datetime.datetime.now().time() >= datetime.time(9,30,0) and \
+                datetime.datetime.now().time() < datetime.time(16,0,0)
+            nowisinETH = datetime.datetime.now().time() >= datetime.time(4,0,0) and \
+                datetime.datetime.now().time() < datetime.time(20,0,0)
+            if 'day' in barlength:
+                if nowisinRTH:
+                    df = df[:-1]
+            elif 'week' in barlength:
+                pass
+            elif 'month' in barlength:
+                pass
+            elif 'hour' in barlength:
+                if not nowisinETH:
+                    df = df[:-1]
+            elif 'min' in barlength:
+                if not nowisinETH:
+                    df = df[:-1]
+        else:
+            # assume futures are always active (so the last record is always a partial bar)
+            df = df[:-1]
 
         # special case: NDX doesn't give us volume, so we have to pick it up from QQQ
         if (symbol == 'NDX'):
