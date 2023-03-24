@@ -54,84 +54,87 @@ class broker_ibkr(broker_root):
             ibconn_cache[ibcachekey] = {'conn': self.conn, 'time': time.time()}
             print("IB: Connected")
 
-    def get_stock(self, symbol):
+    def get_stock(self, symbol, forhistory=False):
         self.load_conn()
         # keep a cache of stocks to avoid repeated calls to IB
         if symbol in stock_cache:
             stock = stock_cache[symbol]
         else:
-            # normalization of the symbol, from TV to IB forms
-            if symbol == 'BRK.B':
-                symbol = 'BRK/B'
-            elif symbol == 'BRK.A':
-                symbol = 'BRK/A'
+            # remove the TV-style 1! suffix from the symbol (e.g. NQ1! -> NQ)
+            symbol = symbol.replace('1!', '')
+            if symbol in ['NQ', 'ES', 'RTY']:
+                if not forhistory:
+                    stock = Future(symbol, '20230616', 'CME')
+                else:
+                    stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
+                stock.is_futures = 1
+                stock.round_precision = 4
 
-            # TV-style NQ1! symbols are used for trading; IB-style like NQ are used for historical data
-            if symbol == 'NQ1!':
-                symbol = 'NQ'
-                stock = Future(symbol, '20230616', 'CME')
+            elif symbol in ['YM']:
+                if not forhistory:
+                    stock = Future(symbol, '20230616', 'CBOT')
+                else:
+                    stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CBOT', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 4
-            elif symbol == 'NQ':
-                symbol = 'NQ'
-                stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
+
+            elif symbol in ['ZN']:
+                if not forhistory:
+                    stock = Future(symbol, '20230621', 'CBOT')
+                else:
+                    stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CBOT', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 4
-            elif symbol == 'ES1!':
-                symbol = 'ES'
-                stock = Future(symbol, '20230616', 'CME')
+
+            # forex futures listed at https://www.interactivebrokers.com/en/trading/cme-wti-futures.php
+            elif symbol in ['M6E', 'M6A', 'M6B', 'MJY', 'MSF', 'MIR', 'MNH']:
+                if not forhistory:
+                    stock = Future(symbol, '20230616', 'CME')
+                else:
+                    stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
+                stock.is_futures = 1
+                stock.round_precision = 10000
+
+            elif symbol in ['MCD']:
+                if not forhistory:
+                    stock = Future(symbol, '20230620', 'CME')
+                else:
+                    stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
+                stock.is_futures = 1
+                stock.round_precision = 10000
+
+            elif symbol in ['HE']:
+                if not forhistory:
+                    stock = Future(symbol, '20230417', 'CME')
+                else:
+                    stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 4
-            elif symbol == 'ES':
-                symbol = 'ES'
-                stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
+
+            elif symbol == 'DX':
+                if not forhistory:
+                    stock = Future(symbol, '20230616', 'NYBOT')
+                else:
+                    stock = Contract(symbol=symbol, secType='CONTFUT', exchange='NYBOT', includeExpired=True)
                 stock.is_futures = 1
-                stock.round_precision = 4
-            elif symbol == 'RTY1!':
-                symbol = 'RTY'
-                stock = Future(symbol, '20230616', 'CME')
-                stock.is_futures = 1
-                stock.round_precision = 4
-            elif symbol == 'RTY':
-                symbol = 'RTY'
-                stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
-                stock.is_futures = 1
-                stock.round_precision = 4
-            elif symbol == 'CL1!':
-                symbol = 'CL'
-                stock = Future(symbol, '20230420', 'NYMEX')
+                stock.round_precision = 100
+
+            elif symbol in ['CL', 'NG']:
+                if not forhistory:
+                    stock = Future(symbol, '20230420', 'NYMEX')
+                else:
+                    stock = Contract(symbol=symbol, secType='CONTFUT', exchange='NYMEX', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 10
-            elif symbol == 'CL':
-                symbol = 'CL'
-                stock = Contract(symbol=symbol, secType='CONTFUT', exchange='NYMEX', includeExpired=True)
+
+            elif symbol in ['GC', 'SI', 'HG']:
+                if not forhistory:
+                    stock = Future(symbol, '20230426', 'COMEX')
+                else:
+                    stock = Contract(symbol=symbol, secType='CONTFUT', exchange='COMEX', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 10
-            elif symbol == 'NG1!':
-                symbol = 'NG'
-                stock = Future(symbol, '20230420', 'NYMEX')
-                stock.is_futures = 1
-                stock.round_precision = 10
-            elif symbol == 'NG':
-                symbol = 'NG'
-                stock = Contract(symbol=symbol, secType='CONTFUT', exchange='NYMEX', includeExpired=True)
-                stock.is_futures = 1
-                stock.round_precision = 10
-            elif symbol == 'HG1!' or symbol == 'HG':
-                symbol = 'HG'
-                stock = Contract(symbol=symbol, secType='CONTFUT', exchange='COMEX', includeExpired=True)
-                stock.is_futures = 1
-                stock.round_precision = 10
-            elif symbol == '6J1!' or symbol == '6J' or symbol == 'J7':
-                symbol = 'J7'
-                stock = Contract(symbol=symbol, secType='CONTFUT', exchange='GLOBEX', includeExpired=True)
-                stock.is_futures = 1
-                stock.round_precision = 10
-            elif symbol == 'HEN2022' or symbol == 'HE':
-                symbol = 'HE'
-                stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
-                stock.is_futures = 1
-                stock.round_precision = 10
+
             elif symbol in ['HXU', 'HXD', 'HQU', 'HQD', 'HEU', 'HED', 'HSU', 'HSD', 'HGU', 'HGD', 'HBU', 'HBD', 'HNU', 'HND', 'HOU', 'HOD', 'HCU', 'HCD']:
                 stock = Stock(symbol, 'SMART', 'CAD')
                 stock.is_futures = 0
@@ -270,7 +273,7 @@ class broker_ibkr(broker_root):
             return df
 
         self.load_conn()
-        stock = self.get_stock(symbol)
+        stock = self.get_stock(symbol, forhistory=True)
 
         # request historical bars
         useRTH = False

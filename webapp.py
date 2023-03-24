@@ -80,6 +80,7 @@ def dashboard():
         order_message
         FROM signals
         order by timestamp desc
+        LIMIT 500
     """)
     signals = cursor.fetchall()
     #hashlib.sha1(row['order_message'])
