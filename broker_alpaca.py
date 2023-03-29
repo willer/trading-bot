@@ -54,21 +54,25 @@ class broker_alpaca(broker_root):
     def get_stock(self, symbol):
         # normalization of the symbol, from TV to Alpaca form
         stock = StockStub(symbol)
-        if symbol == 'NQ1!':
+        symbol = symbol.replace('1!', '')
+        if symbol in ['NQ', 'ES', 'RTY']:
             stock.is_futures = 1
-        elif symbol == 'ES1!':
+        elif symbol in ['YM']:
             stock.is_futures = 1
-        elif symbol == 'RTY1!':
+        elif symbol in ['ZN']:
             stock.is_futures = 1
-        elif symbol == 'CL1!':
+        # forex futures listed at https://www.interactivebrokers.com/en/trading/cme-wti-futures.php
+        elif symbol in ['M6E', 'M6A', 'M6B', 'MJY', 'MSF', 'MIR', 'MNH']:
             stock.is_futures = 1
-        elif symbol == 'NG1!':
+        elif symbol in ['MCD']:
             stock.is_futures = 1
-        elif symbol == 'HG1!':
+        elif symbol in ['HE']:
             stock.is_futures = 1
-        elif symbol == '6J1!':
+        elif symbol == 'DX':
             stock.is_futures = 1
-        elif symbol == 'HEN2022':
+        elif symbol in ['CL', 'NG']:
+            stock.is_futures = 1
+        elif symbol in ['GC', 'SI', 'HG']:
             stock.is_futures = 1
         else:
             stock.is_futures = 0

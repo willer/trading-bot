@@ -62,13 +62,24 @@ class broker_ibkr(broker_root):
         else:
             # remove the TV-style 1! suffix from the symbol (e.g. NQ1! -> NQ)
             symbol = symbol.replace('1!', '')
-            if symbol in ['NQ', 'ES', 'RTY']:
+            if False:
+                pass
+
+            elif symbol in ['NQ', 'ES']:
                 if not forhistory:
                     stock = Future(symbol, '20230616', 'CME')
                 else:
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 4
+
+            elif symbol in ['RTY']:
+                if not forhistory:
+                    stock = Future(symbol, '20230616', 'CME')
+                else:
+                    stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
+                stock.is_futures = 1
+                stock.round_precision = 10
 
             elif symbol in ['YM']:
                 if not forhistory:
