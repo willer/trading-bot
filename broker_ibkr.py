@@ -65,7 +65,7 @@ class broker_ibkr(broker_root):
             if False:
                 pass
 
-            elif symbol in ['NQ', 'ES']:
+            elif symbol in ['NQ', 'ES', 'MNQ', 'MES']:
                 if not forhistory:
                     stock = Future(symbol, '20230616', 'CME')
                 else:
@@ -138,7 +138,7 @@ class broker_ibkr(broker_root):
                 stock.is_futures = 1
                 stock.round_precision = 10
 
-            elif symbol in ['GC', 'SI', 'HG']:
+            elif symbol in ['GC', 'SI', 'HG', 'MGC', 'MSI', 'MHG']:
                 if not forhistory:
                     stock = Future(symbol, '20230426', 'COMEX')
                 else:

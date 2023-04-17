@@ -146,8 +146,11 @@ async def check_messages():
 
                 # check for account and security specific percentage of net liquidity in config
                 # (if it's not a goflat order)
-                if not order_stock.is_futures and desired_position != 0 and f"{order_symbol}-pct" in aconfig:
-                    percent = float(aconfig[f"{order_symbol}-pct"])
+                if not order_stock.is_futures and desired_position != 0 and (f"{order_symbol}-pct" in aconfig or f"default-pct" in aconfig):
+                    if f"{order_symbol}-pct" in aconfig:
+                        percent = float(aconfig[f"{order_symbol}-pct"])
+                    else:
+                        percent = float(aconfig["default-pct"])
                     # first, we find the value of the desired position in dollars, and set up some tiers
                     # to support various levels of take-profits
                     if round(abs(desired_position) * order_price) < 5000:

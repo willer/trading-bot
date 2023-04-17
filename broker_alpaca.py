@@ -72,7 +72,7 @@ class broker_alpaca(broker_root):
             stock.is_futures = 1
         elif symbol in ['CL', 'NG']:
             stock.is_futures = 1
-        elif symbol in ['GC', 'SI', 'HG']:
+        elif symbol in ['GC', 'SI', 'HG', 'MGC', 'MSI', 'MHG']:
             stock.is_futures = 1
         else:
             stock.is_futures = 0
