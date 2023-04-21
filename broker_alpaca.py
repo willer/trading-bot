@@ -88,6 +88,10 @@ class broker_alpaca(broker_root):
         else:
             multisymbol_request_params = StockLatestQuoteRequest(symbol_or_symbols=[symbol])
             latest_multisymbol_quotes = self.dataconn.get_stock_latest_quote(multisymbol_request_params)
+            if symbol not in latest_multisymbol_quotes:
+                # can't find this symbol
+                print(f"Alpaca: get_price({symbol}) failed")
+                return 0
             ticker = latest_multisymbol_quotes[symbol]
             ticker_cache[symbol] = {'ticker': ticker, 'time': time.time()}
 

@@ -72,6 +72,7 @@ class broker_ibkr(broker_root):
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 4
+                stock.market_order = False
 
             elif symbol in ['RTY']:
                 if not forhistory:
@@ -80,6 +81,7 @@ class broker_ibkr(broker_root):
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 10
+                stock.market_order = False
 
             elif symbol in ['YM']:
                 if not forhistory:
@@ -88,6 +90,7 @@ class broker_ibkr(broker_root):
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CBOT', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 4
+                stock.market_order = False
 
             elif symbol in ['ZN']:
                 if not forhistory:
@@ -96,6 +99,7 @@ class broker_ibkr(broker_root):
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CBOT', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 4
+                stock.market_order = False
 
             # forex futures listed at https://www.interactivebrokers.com/en/trading/cme-wti-futures.php
             elif symbol in ['M6E', 'M6A', 'M6B', 'MJY', 'MSF', 'MIR', 'MNH']:
@@ -105,6 +109,7 @@ class broker_ibkr(broker_root):
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 10000
+                stock.market_order = False
 
             elif symbol in ['MCD']:
                 if not forhistory:
@@ -113,6 +118,7 @@ class broker_ibkr(broker_root):
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 10000
+                stock.market_order = False
 
             elif symbol in ['HE']:
                 if not forhistory:
@@ -121,6 +127,7 @@ class broker_ibkr(broker_root):
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 4
+                stock.market_order = False
 
             elif symbol == 'DX':
                 if not forhistory:
@@ -129,6 +136,7 @@ class broker_ibkr(broker_root):
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='NYBOT', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 100
+                stock.market_order = False
 
             elif symbol in ['CL', 'NG']:
                 if not forhistory:
@@ -137,6 +145,7 @@ class broker_ibkr(broker_root):
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='NYMEX', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 10
+                stock.market_order = False
 
             elif symbol in ['GC', 'SI', 'HG', 'MGC', 'MSI', 'MHG']:
                 if not forhistory:
@@ -145,35 +154,50 @@ class broker_ibkr(broker_root):
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='COMEX', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 10
+                stock.market_order = False
 
             elif symbol in ['HXU', 'HXD', 'HQU', 'HQD', 'HEU', 'HED', 'HSU', 'HSD', 'HGU', 'HGD', 'HBU', 'HBD', 'HNU', 'HND', 'HOU', 'HOD', 'HCU', 'HCD']:
-                stock = Stock(symbol, 'SMART', 'CAD')
+                #stock = Stock(symbol, 'SMART', 'CAD')
+                stock = Stock(symbol, 'TSE')
                 stock.is_futures = 0
                 stock.round_precision = 100
+                stock.market_order = False
+
             elif symbol == 'NDX':
                 stock = Index(symbol, 'NASDAQ')
                 stock.is_futures = 0
                 stock.round_precision = 100
+                stock.market_order = False
+
             elif symbol == 'VIX':
                 stock = Index(symbol, 'CBOE')
                 stock.is_futures = 0
                 stock.round_precision = 100
+                stock.market_order = False
+
             elif symbol == 'BRK-B' or symbol == 'BRK/B' or symbol == 'BRK.B':
                 stock = Index('BRK B', 'NYSE', 'USD')
                 stock.is_futures = 0
                 stock.round_precision = 100
+                stock.market_order = False
+
             elif symbol == 'JETS':
                 stock = Index('JETS', 'NYSE')
                 stock.is_futures = 0
                 stock.round_precision = 100
+                stock.market_order = False
+
             elif symbol == 'WEAT':
                 stock = Index('WEAT', 'NYSE')
                 stock.is_futures = 0
                 stock.round_precision = 100
+                stock.market_order = False
+
             else:
                 stock = Stock(symbol, 'SMART', 'USD')
                 stock.is_futures = 0
                 stock.round_precision = 100
+                stock.market_order = False
 
             stock_cache[symbol] = stock
         return stock
@@ -188,6 +212,29 @@ class broker_ibkr(broker_root):
         else:
             [ticker] = self.conn.reqTickers(stock)
             ticker_cache[symbol] = {'ticker': ticker, 'time': time.time()}
+
+        if math.isnan(ticker.last):
+            if math.isnan(ticker.close):
+                raise Exception(f"error trying to retrieve stock price for {symbol}, last={ticker.last}, close={ticker.close}")
+            else:
+                price = ticker.close
+        else:
+            price = ticker.last
+        print(f"  get_price({symbol}) -> {price}")
+        return price
+
+    # example: get_price_opt('SPY', datetime.date.today, 280, 'P', '20191016')
+    def get_price_opt(self, symbol, expiry, strike, put_call):
+        self.load_conn()
+
+        datestr = expiry.strftime("%Y%m%d")
+        contract = Option(symbol, expiry, strike, put_call, "SMART")
+        ticker = self.conn.reqMktData(contract)
+
+        #order = MarketOrder("Buy",2)
+        #trade = self.conn.placeOrder(contract,order)
+        #stock = self.get_stock(symbol)
+
 
         if math.isnan(ticker.last):
             if math.isnan(ticker.close):
@@ -238,14 +285,23 @@ class broker_ibkr(broker_root):
 
         # if we need to buy or sell, do it with a limit order
         if position_variation != 0:
-            price = self.get_price(symbol)
-            high_limit_price = self.x_round(price * 1.005, stock.round_precision)
-            low_limit_price  = self.x_round(price * 0.995, stock.round_precision)
 
-            if position_variation > 0:
-                order = LimitOrder('BUY', position_variation, high_limit_price)
+            if stock.market_order:
+                if position_variation > 0:
+                    order = MarketOrder('BUY', position_variation)
+                else:
+                    order = MarketOrder('SELL', abs(position_variation))
+
             else:
-                order = LimitOrder('SELL', abs(position_variation), low_limit_price)
+                price = self.get_price(symbol)
+                high_limit_price = self.x_round(price * 1.005, stock.round_precision)
+                low_limit_price  = self.x_round(price * 0.995, stock.round_precision)
+
+                if position_variation > 0:
+                    order = LimitOrder('BUY', position_variation, high_limit_price)
+                else:
+                    order = LimitOrder('SELL', abs(position_variation), low_limit_price)
+
             order.outsideRth = True
             order.account = self.account
 
