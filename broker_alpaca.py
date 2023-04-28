@@ -55,7 +55,7 @@ class broker_alpaca(broker_root):
         # normalization of the symbol, from TV to Alpaca form
         stock = StockStub(symbol)
         symbol = symbol.replace('1!', '')
-        if symbol in ['NQ', 'ES', 'RTY']:
+        if symbol in ['NQ', 'ES', 'RTY', 'MES', 'MNQ', 'M2K']:
             stock.is_futures = 1
         elif symbol in ['YM']:
             stock.is_futures = 1

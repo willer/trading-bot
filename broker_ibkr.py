@@ -99,7 +99,7 @@ class broker_ibkr(broker_root):
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CBOT', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 4
-                stock.market_order = False
+                stock.market_order = True
 
             # forex futures listed at https://www.interactivebrokers.com/en/trading/cme-wti-futures.php
             elif symbol in ['M6E', 'M6A', 'M6B', 'MJY', 'MSF', 'MIR', 'MNH']:
@@ -140,7 +140,7 @@ class broker_ibkr(broker_root):
 
             elif symbol in ['CL', 'NG']:
                 if not forhistory:
-                    stock = Future(symbol, '20230420', 'NYMEX')
+                    stock = Future(symbol, '20230522', 'NYMEX')
                 else:
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='NYMEX', includeExpired=True)
                 stock.is_futures = 1
@@ -149,12 +149,12 @@ class broker_ibkr(broker_root):
 
             elif symbol in ['GC', 'SI', 'HG', 'MGC', 'MSI', 'MHG']:
                 if not forhistory:
-                    stock = Future(symbol, '20230426', 'COMEX')
+                    stock = Future(symbol, '20230628', 'COMEX')
                 else:
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='COMEX', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 10
-                stock.market_order = False
+                stock.market_order = True
 
             elif symbol in ['HXU', 'HXD', 'HQU', 'HQD', 'HEU', 'HED', 'HSU', 'HSD', 'HGU', 'HGD', 'HBU', 'HBD', 'HNU', 'HND', 'HOU', 'HOD', 'HCU', 'HCD']:
                 #stock = Stock(symbol, 'SMART', 'CAD')
