@@ -61,6 +61,8 @@ class broker_alpaca(broker_root):
             stock.is_futures = 1
         elif symbol in ['ZN']:
             stock.is_futures = 1
+        elif symbol in ['VX']:
+            stock.is_futures = 1
         # forex futures listed at https://www.interactivebrokers.com/en/trading/cme-wti-futures.php
         elif symbol in ['M6E', 'M6A', 'M6B', 'MJY', 'MSF', 'MIR', 'MNH']:
             stock.is_futures = 1

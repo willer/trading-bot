@@ -89,7 +89,7 @@ class broker_ibkr(broker_root):
                 else:
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CBOT', includeExpired=True)
                 stock.is_futures = 1
-                stock.round_precision = 4
+                stock.round_precision = 100
                 stock.market_order = False
 
             elif symbol in ['ZN']:
@@ -98,8 +98,17 @@ class broker_ibkr(broker_root):
                 else:
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CBOT', includeExpired=True)
                 stock.is_futures = 1
-                stock.round_precision = 4
-                stock.market_order = True
+                stock.round_precision = 100
+                stock.market_order = False
+
+            elif symbol in ['VX']:
+                if not forhistory:
+                    stock = Future('VIX', '20230517', 'CFE')
+                else:
+                    stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CFE', includeExpired=True)
+                stock.is_futures = 1
+                stock.round_precision = 100
+                stock.market_order = False
 
             # forex futures listed at https://www.interactivebrokers.com/en/trading/cme-wti-futures.php
             elif symbol in ['M6E', 'M6A', 'M6B', 'MJY', 'MSF', 'MIR', 'MNH']:
