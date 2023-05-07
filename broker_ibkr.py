@@ -90,7 +90,7 @@ class broker_ibkr(broker_root):
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CBOT', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 100
-                stock.market_order = False
+                stock.market_order = True
 
             elif symbol in ['ZN']:
                 if not forhistory:
@@ -108,7 +108,7 @@ class broker_ibkr(broker_root):
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CFE', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 100
-                stock.market_order = False
+                stock.market_order = True
 
             # forex futures listed at https://www.interactivebrokers.com/en/trading/cme-wti-futures.php
             elif symbol in ['M6E', 'M6A', 'M6B', 'MJY', 'MSF', 'MIR', 'MNH']:
@@ -156,11 +156,20 @@ class broker_ibkr(broker_root):
                 stock.round_precision = 10
                 stock.market_order = False
 
-            elif symbol in ['GC', 'SI', 'HG', 'MGC', 'MSI', 'MHG']:
+            elif symbol in ['GC', 'HG', 'MGC', 'MHG']:
                 if not forhistory:
                     stock = Future(symbol, '20230628', 'COMEX')
                 else:
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='COMEX', includeExpired=True)
+                stock.is_futures = 1
+                stock.round_precision = 10
+                stock.market_order = True
+
+            elif symbol in ['SI','MSI']:
+                if not forhistory:
+                    stock = Future(symbol, '20230727', 'COMEX', currency='USD', multiplier='1000')
+                else:
+                    stock = Contract(symbol=symbol, secType='CONTFUT', exchange='COMEX', currency='USD', multiplier='1000', includeExpired=True)
                 stock.is_futures = 1
                 stock.round_precision = 10
                 stock.market_order = True
@@ -283,6 +292,10 @@ class broker_ibkr(broker_root):
 
     async def set_position_size(self, symbol, amount):
         print(f"set_position_size({self.account},{symbol},{amount})")
+        if False:
+            print(f"  SKIPPING")
+            return
+
         self.load_conn()
         stock = self.get_stock(symbol)
 
