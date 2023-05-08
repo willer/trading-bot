@@ -6,6 +6,6 @@ logfile=$0.log
 export FLASK_APP=webapp
 export FLASK_ENV=development
 export PYTHONPATH=.
-whereis python3
-python3 -m flask run -p 6008 2>&1 |tee -a $logfile
+py=`which python`
+"$py" -m flask run -p 6008 2>&1 |tee -a $logfile
 
