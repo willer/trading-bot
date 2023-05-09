@@ -74,7 +74,7 @@ class broker_ibkr(broker_root):
                 stock.round_precision = 4
                 stock.market_order = False
 
-            elif symbol in ['RTY']:
+            elif symbol in ['RTY','M2K']:
                 if not forhistory:
                     stock = Future(symbol, '20230616', 'CME')
                 else:

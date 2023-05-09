@@ -4,3 +4,4 @@ flask>=2.0
 alpaca-py
 textmagic
 yfinance
+tzdata
