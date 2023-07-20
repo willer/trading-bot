@@ -137,8 +137,9 @@ async def check_messages():
                 # or both if we're going flat
                 if aconfig.get('use-inverse-etf', 'no') == 'yes':
                     if desired_position >= 0:
-                        short_symbol = config['inverse-etfs'][order_symbol]
-                        await driver.set_position_size(short_symbol, 0)
+                        short_symbol = config['inverse-etfs'].get(order_symbol)
+                        if short_symbol is not None:
+                            await driver.set_position_size(short_symbol, 0)
                     if desired_position <= 0:
                         await driver.set_position_size(order_symbol, 0)
 

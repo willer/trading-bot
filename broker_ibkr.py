@@ -83,7 +83,7 @@ class broker_ibkr(broker_root):
                 stock.round_precision = 10
                 stock.market_order = False
 
-            elif symbol in ['YM']:
+            elif symbol in ['YM','MYM']:
                 if not forhistory:
                     stock = Future(symbol, '20230616', 'CBOT')
                 else:
@@ -179,7 +179,7 @@ class broker_ibkr(broker_root):
                 stock = Stock(symbol, 'TSE')
                 stock.is_futures = 0
                 stock.round_precision = 100
-                stock.market_order = False
+                stock.market_order = True
 
             elif symbol == 'NDX':
                 stock = Index(symbol, 'NASDAQ')

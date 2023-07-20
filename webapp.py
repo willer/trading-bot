@@ -1,3 +1,4 @@
+import json
 import redis, sqlite3, time, os, hashlib, math
 from flask import Flask, render_template, request, g, current_app
 
@@ -103,6 +104,29 @@ def resend():
             r.publish('tradingview', row["order_message"])
             return "<html><body>Found it!<br><br><a href=/>Back to Home</a></body></html>"
     return "<html><body>Didn't find it!<br><br><a href=/>Back to Home</a></body></html>"
+
+# POST /order
+@app.post('/order')
+def order():
+    direction = request.form.get("direction")
+    ticker = request.form.get("ticker")
+    if direction == "long" or direction == "short":
+        position_size = 1000000
+    else:
+        position_size = 0
+
+    # bot side only cares about a few fields
+    message = {
+        "ticker": ticker,
+        "strategy": {
+            "bot": "live",
+            "market_position": direction,
+            "market_position_size": position_size,
+        }
+    }
+    r.publish('tradingview', json.dumps(message))
+
+    return f"<html><body>Sent!<br>{message}<br><a href=/>Back to Home</a></body></html>"
 
 # POST /webhook
 @app.post("/webhook")

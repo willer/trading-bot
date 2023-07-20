@@ -21,6 +21,21 @@
                         <input type=submit class="btn btn-primary" value="Start Backend"></input>
                     </form>
                     <br>
+                    <form method="post" action="/order" class="form-inline">
+                        <input type="hidden" name="hash" value="all">
+                        <div class="input-group">
+                            <input type="text" name="ticker" class="form-control" placeholder="Ticker" style="text-transform: uppercase; width: 100px">
+                            <select name="direction" class="form-control" style="width: 100px">
+                                <option value="flat">Flat</option>
+                                <option value="long">Long</option>
+                                <option value="short">Short</option>
+                            </select>
+                            <div class="input-group-append">
+                                <button type="submit" class="btn btn-primary">Order</button>
+                            </div>
+                        </div>
+                    </form>
+                    <br>
                     <a href="/show-logs-ibkr?tail=500">Show IBKR Logs</a>
                     <a href="/show-logs-alpaca?tail=500">Show Alpaca Logs</a>
                 </div>
