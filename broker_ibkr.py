@@ -67,7 +67,7 @@ class broker_ibkr(broker_root):
 
             elif symbol in ['NQ', 'ES', 'MNQ', 'MES']:
                 if not forhistory:
-                    stock = Future(symbol, '20230616', 'CME')
+                    stock = Future(symbol, '20230915', 'CME')
                 else:
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
                 stock.is_futures = 1
@@ -76,7 +76,7 @@ class broker_ibkr(broker_root):
 
             elif symbol in ['RTY','M2K']:
                 if not forhistory:
-                    stock = Future(symbol, '20230616', 'CME')
+                    stock = Future(symbol, '20230915', 'CME')
                 else:
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
                 stock.is_futures = 1
@@ -85,7 +85,7 @@ class broker_ibkr(broker_root):
 
             elif symbol in ['YM','MYM']:
                 if not forhistory:
-                    stock = Future(symbol, '20230616', 'CBOT')
+                    stock = Future(symbol, '20230915', 'CBOT')
                 else:
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CBOT', includeExpired=True)
                 stock.is_futures = 1
