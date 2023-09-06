@@ -117,7 +117,7 @@ def order():
 
     # bot side only cares about a few fields
     message = {
-        "ticker": ticker,
+        "ticker": ticker.upper(),
         "strategy": {
             "bot": "live",
             "market_position": direction,
