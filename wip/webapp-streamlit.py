@@ -82,26 +82,28 @@ def order():
 
 # Function to handle webhook
 def webhook():
-    data = st.text_area("Webhook Data")
-    if st.button("Send Webhook"):
-        if data:
-            r.publish('tradingview', data)
-            data_dict = json.loads(data)
-            db = get_db()
-            cursor = db.cursor()
-            cursor.execute("""
-                INSERT INTO signals (ticker, bot, order_action, order_contracts, market_position, market_position_size, order_price, order_message) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (data_dict['ticker'], 
-                    data_dict['strategy']['bot'],
-                    data_dict['strategy']['order_action'], 
-                    data_dict['strategy']['order_contracts'],
-                    data_dict['strategy']['market_position'],
-                    data_dict['strategy']['market_position_size'],
-                    data_dict['strategy']['order_price'],
-                    data))
-            db.commit()
-            st.write("Webhook data sent and saved!")
+    query_params = st.experimental_get_query_params()
+    data = query_params.get("data", [None])[0]
+    if data:
+        r.publish('tradingview', data)
+        data_dict = json.loads(data)
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("""
+            INSERT INTO signals (ticker, bot, order_action, order_contracts, market_position, market_position_size, order_price, order_message) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (data_dict['ticker'], 
+                data_dict['strategy']['bot'],
+                data_dict['strategy']['order_action'], 
+                data_dict['strategy']['order_contracts'],
+                data_dict['strategy']['market_position'],
+                data_dict['strategy']['market_position_size'],
+                data_dict['strategy']['order_price'],
+                data))
+        db.commit()
+        st.write("Webhook data sent and saved!")
+    else:
+        st.write("No webhook data received.")
 
 # Function to check health
 def health():
