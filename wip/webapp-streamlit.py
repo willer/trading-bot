@@ -1,5 +1,6 @@
 import streamlit as st
 import json
+import pandas as pd
 import redis
 import sqlite3
 import os
@@ -37,8 +38,8 @@ def dashboard():
     """)
     signals = cursor.fetchall()
     st.title("Dashboard")
-    for signal in signals:
-        st.write(signal)
+    df = pd.DataFrame(signals)
+    st.dataframe(df)
 
 # Function to handle resend
 def resend():
