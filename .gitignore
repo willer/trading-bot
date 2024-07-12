@@ -6,3 +6,4 @@ config.ini
 *.swp
 
 trade.db
+.aider*
