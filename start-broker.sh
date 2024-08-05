@@ -9,6 +9,7 @@ while true; do
 	date |tee -a $logfile
 	echo Starting up |tee -a $logfile
 	py=`which python`
+	if [ -z "$py" ]; then py=`which python3`; fi
 	"$py" -u broker.py live 2>&1 |tee -a $logfile
 	echo Restarting in 15s |tee -a $logfile
 	sleep 15
