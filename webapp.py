@@ -110,10 +110,14 @@ def resend():
 def order():
     direction = request.form.get("direction")
     ticker = request.form.get("ticker")
-    if direction == "long" or direction == "short":
-        position_size = 1000000
-    else:
+
+    position_size = 1000000
+    if direction == "flat":
         position_size = 0
+    # special case for futures, for now
+    if direction != "flat":
+        if ticker == "NQ1!" or ticker == "ES1!" or ticker == "GC1!":
+            position_size = 1
 
     # bot side only cares about a few fields
     message = {
