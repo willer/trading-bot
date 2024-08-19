@@ -88,6 +88,9 @@ async def check_messages():
             if 'bot' not in data_dict['strategy']:
                 raise Exception("You need to indicate the bot in the strategy portion of the json payload")
                 return
+            # special case: a manual trade is treated like a live trade
+            if data_dict['strategy']['bot'].strip() == 'human':
+                data_dict['strategy']['bot'] = bot
             if bot != data_dict['strategy']['bot']:
                 print("signal intended for different bot '",data_dict['strategy']['bot'],"', skipping")
                 return

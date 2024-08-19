@@ -8,10 +8,10 @@ class broker_root:
         pass
 
     def handle_ex(self, e):
-        tmu = self.config['DEFAULT']['textmagic-username']
-        tmk = self.config['DEFAULT']['textmagic-key']
-        tmp = self.config['DEFAULT']['textmagic-phone']
-        if tmu != '':
+        tmu = self.config['DEFAULT'].get('textmagic-username','')
+        tmk = self.config['DEFAULT'].get('textmagic-key','')
+        tmp = self.config['DEFAULT'].get('textmagic-phone','')
+        if tmu != '' and tmk != '' and tmp != '':
             tmc = TextmagicRestClient(tmu, tmk)
             # if e is a string send it, otherwise send the first 300 chars of the traceback
             if isinstance(e, str):

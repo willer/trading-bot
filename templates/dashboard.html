@@ -5,6 +5,12 @@
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-kenU1KFdBIe4zVF0s0G1M5b4hcpxyD9F7jL+jjXkk+Q2h455rYXK/7HAuoJl+0I4" crossorigin="anonymous"></script>
     </head>
 
+    <style>
+        form {
+            margin-block-end: 0px;
+        }
+    </style>
+
     <body>
         <div class="container">
             <div class="row">
@@ -34,8 +40,6 @@
                                     <button type="button" data-ticker="TQQQ" class="list-group-item list-group-item-action">TQQQ</button>
                                     <button type="button" data-ticker="NQ1!" class="list-group-item list-group-item-action">NQ1!</button>
                                     <button type="button" data-ticker="SOXL" class="list-group-item list-group-item-action">SOXL</button>
-                                    <button type="button" data-ticker="TNA" class="list-group-item list-group-item-action">TNA</button>
-                                    <button type="button" data-ticker="FAS" class="list-group-item list-group-item-action">FAS</button>
                                 </div>
                             </div>
                             <div class="col-auto">
@@ -43,8 +47,8 @@
                                     <button type="button" data-direction="long" class="list-group-item list-group-item-action list-group-item-success">long</button>
                                     <button type="button" data-direction="flat" class="list-group-item list-group-item-action list-group-item-light">flat</button>
                                     <button type="button" data-direction="short" class="list-group-item list-group-item-action list-group-item-danger">short</button>
-                                    <br><br>
-                                    <button type="submit" class="btn btn-primary">submit order</button>
+                                    <div style="margin-top: 3px;"></div>
+                                    <button type="submit" class="btn btn-primary">Submit Order</button>
                                 </div>
                             </div>
                         </div>
@@ -90,18 +94,23 @@
                     </thead>
                     <tbody>
                         {% for signal in signals %}
-                        {% if signal.bot == 'live' %}
+                        {% if signal.bot == 'live' or signal.bot == 'human' %}
                         <tr class="{{ 'table-success' if signal.market_position=='long' else 'table-danger' if signal.market_position=='short' else '' }} !important">
                             <td>{{ signal.timestamp }}</td>
                             <td>{{ signal.bot or "" }}</td>
                             <td>{{ signal.ticker }}</td>
                             <td>{{ signal.market_position or "" }}</td>
                             <td>{{ signal.market_position_size or "" }}</td>
-                            <td>{{ signal.order_price }}</td>
+                            <td>{{ "%.2f"|format(signal.order_price|float) if signal.order_price != '0.00' else "" }}</td>
                             <td>
                                 <form method=post action=/resend>
-                                <input type=hidden name=hash value="{{ hashlib.sha1(signal.order_message).hexdigest() }}"></input>
-                                <input type=submit class="btn btn-outline-secondary" value="Resend"></input>
+                                    {% if signal.order_message is string %}
+                                    <input type=hidden name=hash value="{{ hashlib.sha1(signal.order_message.encode('utf-8')).hexdigest() }}"></input>
+                                    <input type=submit class="btn btn-outline-secondary" value="Resend"></input>
+                                    {% else %}
+                                    <input type=hidden name=hash value="{{ hashlib.sha1(signal.order_message).hexdigest() }}"></input>
+                                    <input type=submit class="btn btn-outline-secondary" value="Resend"></input>
+                                    {% endif %}
                                 </form>
                             </td> 
                         </tr>
@@ -133,7 +142,7 @@
                     </thead>
                     <tbody>
                         {% for signal in signals %}
-                        {% if signal.bot != 'live' %}
+                        {% if signal.bot != 'live' and signal.bot != 'human' %}
                         <tr>
                             <td>{{ signal.timestamp }}</td>
                             <td>{{ signal.bot or "" }}</td>
@@ -141,12 +150,8 @@
                             <td>{{ signal.market_position or "" }}</td>
 
                             <td>{{ signal.market_position_size or "" }}</td>
-                            <td>{{ signal.order_price }}</td>
+                            <td>{{ "%.2f"|format(signal.order_price|float) }}</td>
                             <td>
-                                <form method=post action=/resend>
-                                <input type=hidden name=hash value="{{ hashlib.sha1(signal.order_message).hexdigest() }}"></input>
-                                <input type=submit class="btn" value="Resend"></input>
-                                </form>
                             </td> 
                         </tr>
                         {% endif %}

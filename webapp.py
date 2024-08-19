@@ -1,8 +1,17 @@
 import json
 import redis, sqlite3, time, os, hashlib, math
-from flask import Flask, render_template, request, g, current_app
+from flask import Flask, render_template, request, g, current_app, redirect, url_for
+from datetime import datetime, time as dt_time
+import random
+from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///trade.db'
+db = SQLAlchemy(app)
+
+# Import create_dash_app after db is initialized
+from dash_app import create_dash_app
+create_dash_app(app, db)
 
 r = redis.Redis(host='localhost', port=6379, db=0)
 p = r.pubsub()
@@ -88,9 +97,24 @@ def dashboard():
 
     return render_template('dashboard.html', signals=signals, sha1=hashlib.sha1)
 
+def is_dangerous_time():
+    now = datetime.now().time()
+    return (dt_time(8, 25) <= now <= dt_time(10, 0)) or (dt_time(12, 0) <= now <= dt_time(16, 0))
+
+@app.route('/confirm_action', methods=['GET'])
+def confirm_action():
+    action = request.args.get('action')
+    params = request.args.get('params')
+    x = random.randint(-10, 30)
+    y = random.randint(-10, 30)
+    return render_template('confirm_action.html', action=action, params=params, x=x, y=y)
+
 # POST /resend?hash=xxx
 @app.post('/resend')
 def resend():
+    if is_dangerous_time():
+        return redirect(url_for('confirm_action', action='resend', params=request.form.get("hash")))
+
     db = get_db()
     cursor = db.cursor()
     cursor.execute("""
@@ -100,7 +124,11 @@ def resend():
     """)
     signals = cursor.fetchall()
     for row in signals:
-        if request.form.get("hash") == hashlib.sha1(row["order_message"]).hexdigest():
+        if isinstance(row["order_message"], str):
+            sha1hash = hashlib.sha1(row["order_message"].encode('utf-8')).hexdigest()
+        else:
+            sha1hash = hashlib.sha1(row["order_message"]).hexdigest()
+        if request.form.get("hash") == sha1hash:
             r.publish('tradingview', row["order_message"])
             return "<html><body>Found it!<br><br><a href=/>Back to Home</a></body></html>"
     return "<html><body>Didn't find it!<br><br><a href=/>Back to Home</a></body></html>"
@@ -108,6 +136,10 @@ def resend():
 # POST /order
 @app.post('/order')
 def order():
+    if is_dangerous_time():
+        params = f"{request.form.get('direction')},{request.form.get('ticker')}"
+        return redirect(url_for('confirm_action', action='order', params=params))
+
     direction = request.form.get("direction")
     ticker = request.form.get("ticker")
 
@@ -119,18 +151,124 @@ def order():
         if ticker == "NQ1!" or ticker == "ES1!" or ticker == "GC1!":
             position_size = 1
 
-    # bot side only cares about a few fields
-    message = {
+    # Message to send to the broker
+    broker_message = {
         "ticker": ticker.upper(),
         "strategy": {
-            "bot": "live",
+            "bot": "live",  # Send 'live' to the broker
             "market_position": direction,
             "market_position_size": position_size,
         }
     }
-    r.publish('tradingview', json.dumps(message))
+    r.publish('tradingview', json.dumps(broker_message))
 
-    return f"<html><body>Sent!<br>{message}<br><a href=/>Back to Home</a></body></html>"
+    # Log the manual activity in the signals table
+    db = get_db()
+    cursor = db.cursor()
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Message to log in the database
+    log_message = {
+        "ticker": ticker.upper(),
+        "strategy": {
+            "bot": "human",  # Log as 'human' in the database
+            "market_position": direction,
+            "market_position_size": position_size,
+        }
+    }
+    
+    cursor.execute("""
+        INSERT INTO signals (timestamp, ticker, bot, market_position, market_position_size, order_price, order_message) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (current_time, 
+          ticker.upper(), 
+          "human",
+          direction,
+          position_size,
+          "N/A",  # Placeholder for price
+          json.dumps(log_message)))
+    db.commit()
+
+    return f"<html><body>Order submitted and logged!<br>{log_message}<br><a href=/>Back to Home</a></body></html>"
+
+@app.route('/execute_action', methods=['POST'])
+def execute_action():
+    action = request.form.get('action')
+    params = request.form.get('params')
+
+    if action == 'resend':
+        return resend_action(params)
+    elif action == 'order':
+        direction, ticker = params.split(',')
+        return order_action(direction, ticker)
+
+def resend_action(hash_value):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("""
+        SELECT order_message
+        FROM signals
+        order by timestamp desc
+    """)
+    signals = cursor.fetchall()
+    for row in signals:
+        if isinstance(row["order_message"], str):
+            sha1hash = hashlib.sha1(row["order_message"].encode('utf-8')).hexdigest()
+        else:
+            sha1hash = hashlib.sha1(row["order_message"]).hexdigest()
+        if hash_value == sha1hash:
+            r.publish('tradingview', row["order_message"])
+            return "<html><body>Found it!<br><br><a href=/>Back to Home</a></body></html>"
+    return "<html><body>Didn't find it!<br><br><a href=/>Back to Home</a></body></html>"
+
+def order_action(direction, ticker):
+    position_size = 1000000
+    if direction == "flat":
+        position_size = 0
+    # special case for futures, for now
+    if direction != "flat":
+        if ticker == "NQ1!" or ticker == "ES1!" or ticker == "GC1!":
+            position_size = 1
+
+    # Message to send to the broker
+    broker_message = {
+        "ticker": ticker.upper(),
+        "strategy": {
+            "bot": "live",  # Send 'live' to the broker
+            "market_position": direction,
+            "market_position_size": position_size,
+        }
+    }
+    r.publish('tradingview', json.dumps(broker_message))
+
+    # Log the manual activity in the signals table
+    db = get_db()
+    cursor = db.cursor()
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Message to log in the database
+    log_message = {
+        "ticker": ticker.upper(),
+        "strategy": {
+            "bot": "human",  # Log as 'human' in the database
+            "market_position": direction,
+            "market_position_size": position_size,
+        }
+    }
+    
+    cursor.execute("""
+        INSERT INTO signals (timestamp, ticker, bot, market_position, market_position_size, order_price, order_message) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (current_time, 
+          ticker.upper(), 
+          "human",
+          direction,
+          position_size,
+          "N/A",  # Placeholder for price
+          json.dumps(log_message)))
+    db.commit()
+
+    return f"<html><body>Order submitted and logged!<br>{log_message}<br><a href=/>Back to Home</a></body></html>"
 
 # POST /webhook
 @app.post("/webhook")
@@ -241,3 +379,9 @@ def show_logs_alpaca():
     else:
         return "<html><body>File not found<br><br><a href=/>Back to Home</a></body></html>"
 
+@app.route('/dashboard')
+def dashboard_page():
+    return redirect('/dashboard/')
+
+if __name__ == '__main__':
+    app.run(debug=True)
