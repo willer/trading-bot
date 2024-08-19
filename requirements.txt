@@ -5,3 +5,5 @@ alpaca-py
 textmagic
 yfinance
 tzdata
+pandas
+plotly

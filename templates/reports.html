@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Reports{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Reports</h1>
+
+    <div class="row mb-3">
+        <div class="col">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Back to Dashboard</a>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col">
+            <form method="get" action="{{ url_for('reports') }}">
+                <div class="form-group">
+                    <label for="timeframe">Select Timeframe:</label>
+                    <select class="form-control" id="timeframe" name="timeframe" onchange="this.form.submit()">
+                        <option value="mtd" {% if timeframe == 'mtd' %}selected{% endif %}>Month to Date</option>
+                        <option value="qtd" {% if timeframe == 'qtd' %}selected{% endif %}>Quarter to Date</option>
+                        <option value="ytd" {% if timeframe == 'ytd' %}selected{% endif %}>Year to Date</option>
+                        <option value="1year" {% if timeframe == '1year' %}selected{% endif %}>1 Year</option>
+                        <option value="30days" {% if timeframe == '30days' %}selected{% endif %}>30 Days</option>
+                        <option value="1week" {% if timeframe == '1week' %}selected{% endif %}>1 Week</option>
+                    </select>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div id="daily-chart"></div>
+        </div>
+        <div class="col-12">
+            <div id="weekly-chart"></div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+    var dailyChart = JSON.parse('{{ chart_daily | safe }}');
+    var weeklyChart = JSON.parse('{{ chart_weekly | safe }}');
+
+    Plotly.newPlot('daily-chart', dailyChart.data, dailyChart.layout);
+    Plotly.newPlot('weekly-chart', weeklyChart.data, weeklyChart.layout);
+</script>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Reports{% endblock %}
+
+{% block content %}
+<h1 class="mt-5">Reports</h1>
+<form method="get" action="{{ url_for('reports') }}">
+    <select name="timeframe" class="form-select">
+        <option value="ytd" {% if timeframe == 'ytd' %}selected{% endif %}>Year to Date</option>
+        <option value="mtd" {% if timeframe == 'mtd' %}selected{% endif %}>Month to Date</option>
+        <option value="1year" {% if timeframe == '1year' %}selected{% endif %}>Last Year</option>
+        <option value="30days" {% if timeframe == '30days' %}selected{% endif %}>Last 30 Days</option>
+        <option value="1week" {% if timeframe == '1week' %}selected{% endif %}>Last Week</option>
+    </select>
+    <input type="submit" value="Generate Report" class="btn btn-primary mt-2">
+</form>
+
+<div id="daily-chart" class="mt-5"></div>
+<div id="weekly-chart" class="mt-5"></div>
+
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+    var dailyChart = JSON.parse('{{ chart_daily | safe }}');
+    var weeklyChart = JSON.parse('{{ chart_weekly | safe }}');
+    
+    Plotly.newPlot('daily-chart', dailyChart.data, dailyChart.layout);
+    Plotly.newPlot('weekly-chart', weeklyChart.data, weeklyChart.layout);
+</script>
+{% endblock %}

@@ -1,10 +1,12 @@
 import json
 import redis, sqlite3, time, os, hashlib, math
 from flask import Flask, render_template, request, g, current_app, redirect, url_for, session
-from datetime import datetime, time as dt_time
+from datetime import datetime, time as dt_time, timedelta
 import random
 from flask_sqlalchemy import SQLAlchemy
 import configparser
+import pandas as pd
+import plotly.express as px
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///trade.db'
@@ -437,6 +439,79 @@ def dashboard_page():
     if not is_logged_in():
         return redirect(url_for('login'))
     return redirect('/dashboard/')
+
+@app.route('/reports')
+def reports():
+    if not is_logged_in():
+        return redirect(url_for('login'))
+    
+    # Get the selected timeframe from the query parameter, default to 'mtd'
+    timeframe = request.args.get('timeframe', 'mtd')
+    
+    # Calculate the start date based on the selected timeframe
+    end_date = datetime.now()
+    if timeframe == 'ytd':
+        start_date = datetime(end_date.year, 1, 1)
+    elif timeframe == 'mtd':
+        start_date = datetime(end_date.year, end_date.month, 1)
+    elif timeframe == 'qtd':
+        quarter = (end_date.month - 1) // 3 + 1
+        start_date = datetime(end_date.year, 3 * quarter - 2, 1)
+    elif timeframe == '1year':
+        start_date = end_date - timedelta(days=365)
+    elif timeframe == '30days':
+        start_date = end_date - timedelta(days=30)
+    elif timeframe == '1week':
+        start_date = end_date - timedelta(days=7)
+    else:
+        start_date = datetime(end_date.year, end_date.month, 1)  # Default to MTD
+
+    # Fetch data from the database
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("""
+        SELECT date(timestamp) as date, bot, COUNT(*) as count
+        FROM signals
+        WHERE timestamp >= ?
+        GROUP BY date(timestamp), bot
+        ORDER BY date(timestamp)
+    """, (start_date,))
+    
+    data = cursor.fetchall()
+    
+    # Convert to pandas DataFrame
+    df = pd.DataFrame(data, columns=['date', 'bot', 'count'])
+    df['date'] = pd.to_datetime(df['date'])
+    
+    # Create charts with consistent colors
+    color_map = {'human': '#FF4136', 'live': '#0074D9', 'test': '#2ECC40'}
+    
+    # Determine if we should group by week or day
+    if timeframe in ['ytd', '1year']:
+        df['date'] = df['date'].dt.to_period('W').apply(lambda r: r.start_time)
+        df = df.groupby(['date', 'bot'])['count'].sum().reset_index()
+        x_title = 'Week'
+    else:
+        x_title = 'Date'
+    
+    fig_time = px.line(df, x='date', y='count', color='bot',
+                       title=f'Number of Signals by {"Week" if timeframe in ["ytd", "1year"] else "Day"}',
+                       labels={'date': x_title, 'count': 'Number of Signals'},
+                       color_discrete_map=color_map)
+    
+    df['day_of_week'] = df['date'].dt.day_name()
+    fig_weekly = px.bar(df.groupby(['day_of_week', 'bot'])['count'].sum().reset_index(),
+                        x='day_of_week', y='count', color='bot', barmode='group',
+                        title='Number of Signals by Day of Week',
+                        labels={'count': 'Number of Signals', 'day_of_week': 'Day of Week'},
+                        category_orders={'day_of_week': ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']},
+                        color_discrete_map=color_map)
+    
+    # Convert charts to JSON for rendering in the template
+    chart_time = fig_time.to_json()
+    chart_weekly = fig_weekly.to_json()
+    
+    return render_template('reports.html', timeframe=timeframe, chart_time=chart_time, chart_weekly=chart_weekly)
 
 if __name__ == '__main__':
     app.run(debug=True)
