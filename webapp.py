@@ -1,13 +1,20 @@
 import json
 import redis, sqlite3, time, os, hashlib, math
-from flask import Flask, render_template, request, g, current_app, redirect, url_for
+from flask import Flask, render_template, request, g, current_app, redirect, url_for, session
 from datetime import datetime, time as dt_time
 import random
 from flask_sqlalchemy import SQLAlchemy
+import configparser
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///trade.db'
+app.config['SECRET_KEY'] = 'your_secret_key_here'  # Add this line
 db = SQLAlchemy(app)
+
+# Load user credentials from config file
+config = configparser.ConfigParser()
+config.read('config.ini')
+USER_CREDENTIALS = config['users']
 
 # Import create_dash_app after db is initialized
 from dash_app import create_dash_app
@@ -73,9 +80,40 @@ def add_imports():
 
 ## ROUTES
 
-# GET /
-@app.get('/')
+# New function to check if user is logged in
+def is_logged_in():
+    return session.get('logged_in', False)
+
+# New login route
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        if username in USER_CREDENTIALS and USER_CREDENTIALS[username] == password:
+            session['logged_in'] = True
+            return redirect(url_for('dashboard'))
+        else:
+            return render_template('login.html', error='Invalid credentials')
+    return render_template('login.html')
+
+# New logout route
+@app.route('/logout')
+def logout():
+    session.pop('logged_in', None)
+    return redirect(url_for('login'))
+
+# Modify existing routes to require login
+@app.route('/')
+def index():
+    if not is_logged_in():
+        return redirect(url_for('login'))
+    return redirect(url_for('dashboard'))
+
+@app.get('/dashboard')
 def dashboard():
+    if not is_logged_in():
+        return redirect(url_for('login'))
     db = get_db()
     cursor = db.cursor()
     cursor.execute("""
@@ -103,6 +141,8 @@ def is_dangerous_time():
 
 @app.route('/confirm_action', methods=['GET'])
 def confirm_action():
+    if not is_logged_in():
+        return redirect(url_for('login'))
     action = request.args.get('action')
     params = request.args.get('params')
     x = random.randint(-10, 30)
@@ -112,6 +152,8 @@ def confirm_action():
 # POST /resend?hash=xxx
 @app.post('/resend')
 def resend():
+    if not is_logged_in():
+        return redirect(url_for('login'))
     if is_dangerous_time():
         return redirect(url_for('confirm_action', action='resend', params=request.form.get("hash")))
 
@@ -136,6 +178,8 @@ def resend():
 # POST /order
 @app.post('/order')
 def order():
+    if not is_logged_in():
+        return redirect(url_for('login'))
     if is_dangerous_time():
         params = f"{request.form.get('direction')},{request.form.get('ticker')}"
         return redirect(url_for('confirm_action', action='order', params=params))
@@ -193,6 +237,8 @@ def order():
 
 @app.route('/execute_action', methods=['POST'])
 def execute_action():
+    if not is_logged_in():
+        return redirect(url_for('login'))
     action = request.form.get('action')
     params = request.form.get('params')
 
@@ -317,18 +363,21 @@ def health():
     else:
         return {"code": "failure", "message-type": "timeout", "message": "no message received"}, 500
 
-# POST /stop-backend
+# Modify these routes to require login
 @app.post("/stop-backend")
 def stop_backend():
+    if not is_logged_in():
+        return redirect(url_for('login'))
     # find the broker processes and kill them
     os.system("pkill -f start-broker-live.sh")
     os.system("pkill -f broker.py")
 
     return "<html><body>Done<br><br><a href=/>Back to Home</a></body></html>"
 
-# POST /start-backend
 @app.post("/start-backend")
 def start_backend():
+    if not is_logged_in():
+        return redirect(url_for('login'))
     # find the broker processes and kill them
     os.system("pkill -f start-broker-live.sh")
     os.system("pkill -f broker.py")
@@ -342,6 +391,8 @@ def start_backend():
 # GET /show-logs-ibkr?tail=xxx
 @app.get("/show-logs-ibkr")
 def show_logs_ibkr():
+    if not is_logged_in():
+        return redirect(url_for('login'))
     tail = request.args.get("tail")
     if tail == None:
         tail = 100
@@ -362,6 +413,8 @@ def show_logs_ibkr():
 # GET /show-logs-alpaca?tail=xxx
 @app.get("/show-logs-alpaca")
 def show_logs_alpaca():
+    if not is_logged_in():
+        return redirect(url_for('login'))
     tail = request.args.get("tail")
     if tail == None:
         tail = 100
@@ -381,6 +434,8 @@ def show_logs_alpaca():
 
 @app.route('/dashboard')
 def dashboard_page():
+    if not is_logged_in():
+        return redirect(url_for('login'))
     return redirect('/dashboard/')
 
 if __name__ == '__main__':
