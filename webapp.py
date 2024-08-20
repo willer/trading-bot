@@ -447,15 +447,23 @@ def reports():
         return redirect(url_for('login'))
     
     timeframe = request.args.get('timeframe', 'mtd')
+    selected_tickers = request.args.getlist('tickers')
+    start_date = get_start_date(timeframe)
+    
     db = get_db()
     cursor = db.cursor()
-    cursor.execute("SELECT DISTINCT ticker FROM signals ORDER BY ticker")
+    cursor.execute("""
+        SELECT DISTINCT ticker 
+        FROM signals 
+        WHERE timestamp >= ? 
+        ORDER BY ticker
+    """, (start_date,))
     all_tickers = [row[0] for row in cursor.fetchall()]
     
     return render_template('reports.html', 
                            timeframe=timeframe, 
                            all_tickers=all_tickers, 
-                           selected_tickers=[])
+                           selected_tickers=selected_tickers)
 
 @app.route('/get_tickers')
 def get_tickers():
@@ -491,7 +499,7 @@ def get_chart_data():
     cursor = db.cursor()
     
     query = """
-        SELECT date(timestamp) as date, bot, COUNT(*) as count, ticker
+        SELECT datetime(timestamp) as datetime, date(timestamp) as date, bot, ticker
         FROM signals
         WHERE timestamp >= ?
     """
@@ -501,37 +509,56 @@ def get_chart_data():
         query += " AND ticker IN ({})".format(','.join(['?'] * len(selected_tickers)))
         params.extend(selected_tickers)
     
-    query += " GROUP BY date(timestamp), bot, ticker ORDER BY date(timestamp)"
-    
     cursor.execute(query, params)
     data = cursor.fetchall()
     
-    df = pd.DataFrame(data, columns=['date', 'bot', 'count', 'ticker'])
+    if not data:
+        return jsonify({
+            'time_chart': {'data': [], 'layout': {'title': 'No data available'}},
+            'weekly_chart': {'data': [], 'layout': {'title': 'No data available'}}
+        })
+    
+    df = pd.DataFrame(data, columns=['datetime', 'date', 'bot', 'ticker'])
+    df['datetime'] = pd.to_datetime(df['datetime'])
     df['date'] = pd.to_datetime(df['date'])
+    
+    # Preprocess the data to change 'human' to 'live' for NQ1! and TQQQ between 4 PM and 8 PM
+    mask = (
+        (df['ticker'].isin(['NQ1!', 'TQQQ'])) &
+        (df['datetime'].dt.hour >= 16) &
+        (df['datetime'].dt.hour < 20) &
+        (df['bot'] == 'human')
+    )
+    df.loc[mask, 'bot'] = 'live'
+    
+    # Group by date, bot, and ticker
+    df_grouped = df.groupby(['date', 'bot', 'ticker']).size().reset_index(name='count')
     
     color_map = {'human': '#FF4136', 'live': '#0074D9', 'test': '#2ECC40'}
     
     if timeframe in ['ytd', '1year']:
-        df['date'] = df['date'].dt.to_period('W').apply(lambda r: r.start_time)
-        df = df.groupby(['date', 'bot', 'ticker'])['count'].sum().reset_index()
+        df_grouped['date'] = df_grouped['date'].dt.to_period('W').apply(lambda r: r.start_time)
+        df_grouped = df_grouped.groupby(['date', 'bot', 'ticker'])['count'].sum().reset_index()
         x_title = 'Week'
     else:
         x_title = 'Date'
     
-    fig_time = px.line(df, x='date', y='count', color='bot',
+    fig_time = px.line(df_grouped, x='date', y='count', color='bot',
                        title=f'Number of Signals by {"Week" if timeframe in ["ytd", "1year"] else "Day"}',
                        labels={'date': x_title, 'count': 'Number of Signals'},
                        color_discrete_map=color_map,
                        hover_data=['ticker'])
     
+    # Ensure proper date formatting for x-axis
+    fig_time.update_xaxes(tickformat="%Y-%m-%d" if timeframe not in ['ytd', '1year'] else "%Y-%m-%d")
+    
     df['day_of_week'] = df['date'].dt.day_name()
-    fig_weekly = px.bar(df.groupby(['day_of_week', 'bot', 'ticker'])['count'].sum().reset_index(),
+    fig_weekly = px.bar(df.groupby(['day_of_week', 'bot'])['bot'].count().reset_index(name='count'),
                         x='day_of_week', y='count', color='bot', barmode='group',
                         title='Number of Signals by Day of Week',
                         labels={'count': 'Number of Signals', 'day_of_week': 'Day of Week'},
                         category_orders={'day_of_week': ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']},
-                        color_discrete_map=color_map,
-                        hover_data=['ticker'])
+                        color_discrete_map=color_map)
     
     def convert_figure_to_dict(fig):
         fig_dict = fig.to_dict()
