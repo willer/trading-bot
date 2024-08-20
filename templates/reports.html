@@ -13,11 +13,11 @@
     </div>
 
     <div class="row mb-4">
-        <div class="col">
-            <form method="get" action="{{ url_for('reports') }}">
+        <div class="col-md-6">
+            <form id="reportForm">
                 <div class="form-group">
                     <label for="timeframe">Select Timeframe:</label>
-                    <select class="form-control" id="timeframe" name="timeframe" onchange="this.form.submit()">
+                    <select class="form-control" id="timeframe" name="timeframe">
                         <option value="mtd" {% if timeframe == 'mtd' %}selected{% endif %}>Month to Date</option>
                         <option value="qtd" {% if timeframe == 'qtd' %}selected{% endif %}>Quarter to Date</option>
                         <option value="ytd" {% if timeframe == 'ytd' %}selected{% endif %}>Year to Date</option>
@@ -26,13 +26,23 @@
                         <option value="1week" {% if timeframe == '1week' %}selected{% endif %}>1 Week</option>
                     </select>
                 </div>
+        </div>
+        <div class="col-md-6">
+                <div class="form-group">
+                    <label for="tickers">Select Tickers:</label>
+                    <select multiple class="form-control select2" id="tickers" name="tickers">
+                        {% for ticker in all_tickers %}
+                            <option value="{{ ticker }}" {% if ticker in selected_tickers %}selected{% endif %}>{{ ticker }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </form>
         </div>
     </div>
 
     <div class="row">
         <div class="col-12 mb-4">
-            <div id="daily-chart"></div>
+            <div id="time-chart"></div>
         </div>
         <div class="col-12">
             <div id="weekly-chart"></div>
@@ -40,12 +50,52 @@
     </div>
 </div>
 
+<!-- Include Select2 CSS and JS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 <script>
-    var dailyChart = JSON.parse('{{ chart_daily | safe }}');
-    var weeklyChart = JSON.parse('{{ chart_weekly | safe }}');
+    $(document).ready(function() {
+        $('.select2').select2({
+            placeholder: 'Select tickers',
+            allowClear: true
+        });
 
-    Plotly.newPlot('daily-chart', dailyChart.data, dailyChart.layout);
-    Plotly.newPlot('weekly-chart', weeklyChart.data, weeklyChart.layout);
+        function updateCharts() {
+            $.ajax({
+                url: "{{ url_for('get_chart_data') }}",
+                type: "GET",
+                data: $('#reportForm').serialize(),
+                success: function(response) {
+                    Plotly.newPlot('time-chart', response.time_chart.data, response.time_chart.layout);
+                    Plotly.newPlot('weekly-chart', response.weekly_chart.data, response.weekly_chart.layout);
+                }
+            });
+        }
+
+        $('#timeframe').change(function() {
+            $.ajax({
+                url: "{{ url_for('get_tickers') }}",
+                type: "GET",
+                data: { timeframe: $(this).val() },
+                success: function(response) {
+                    $('#tickers').empty();
+                    $.each(response.tickers, function(i, ticker) {
+                        $('#tickers').append($('<option>', {
+                            value: ticker,
+                            text: ticker
+                        }));
+                    });
+                    $('#tickers').trigger('change');
+                }
+            });
+        });
+
+        $('#timeframe, #tickers').change(updateCharts);
+
+        updateCharts();
+    });
 </script>
 {% endblock %}

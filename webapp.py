@@ -1,12 +1,13 @@
 import json
 import redis, sqlite3, time, os, hashlib, math
-from flask import Flask, render_template, request, g, current_app, redirect, url_for, session
+from flask import Flask, jsonify, render_template, request, g, current_app, redirect, url_for, session
 from datetime import datetime, time as dt_time, timedelta
 import random
 from flask_sqlalchemy import SQLAlchemy
 import configparser
 import pandas as pd
 import plotly.express as px
+import numpy as np
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///trade.db'
@@ -445,51 +446,74 @@ def reports():
     if not is_logged_in():
         return redirect(url_for('login'))
     
-    # Get the selected timeframe from the query parameter, default to 'mtd'
     timeframe = request.args.get('timeframe', 'mtd')
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("SELECT DISTINCT ticker FROM signals ORDER BY ticker")
+    all_tickers = [row[0] for row in cursor.fetchall()]
     
-    # Calculate the start date based on the selected timeframe
-    end_date = datetime.now()
-    if timeframe == 'ytd':
-        start_date = datetime(end_date.year, 1, 1)
-    elif timeframe == 'mtd':
-        start_date = datetime(end_date.year, end_date.month, 1)
-    elif timeframe == 'qtd':
-        quarter = (end_date.month - 1) // 3 + 1
-        start_date = datetime(end_date.year, 3 * quarter - 2, 1)
-    elif timeframe == '1year':
-        start_date = end_date - timedelta(days=365)
-    elif timeframe == '30days':
-        start_date = end_date - timedelta(days=30)
-    elif timeframe == '1week':
-        start_date = end_date - timedelta(days=7)
-    else:
-        start_date = datetime(end_date.year, end_date.month, 1)  # Default to MTD
+    return render_template('reports.html', 
+                           timeframe=timeframe, 
+                           all_tickers=all_tickers, 
+                           selected_tickers=[])
 
-    # Fetch data from the database
+@app.route('/get_tickers')
+def get_tickers():
+    if not is_logged_in():
+        return jsonify({'error': 'Not logged in'}), 401
+    
+    timeframe = request.args.get('timeframe', 'mtd')
+    start_date = get_start_date(timeframe)
+    
     db = get_db()
     cursor = db.cursor()
     cursor.execute("""
-        SELECT date(timestamp) as date, bot, COUNT(*) as count
+        SELECT DISTINCT ticker 
+        FROM signals 
+        WHERE timestamp >= ? 
+        ORDER BY ticker
+    """, (start_date,))
+    tickers = [row[0] for row in cursor.fetchall()]
+    
+    return jsonify({'tickers': tickers})
+
+@app.route('/get_chart_data')
+def get_chart_data():
+    if not is_logged_in():
+        return jsonify({'error': 'Not logged in'}), 401
+    
+    timeframe = request.args.get('timeframe', 'mtd')
+    selected_tickers = request.args.getlist('tickers')
+    
+    start_date = get_start_date(timeframe)
+    
+    db = get_db()
+    cursor = db.cursor()
+    
+    query = """
+        SELECT date(timestamp) as date, bot, COUNT(*) as count, ticker
         FROM signals
         WHERE timestamp >= ?
-        GROUP BY date(timestamp), bot
-        ORDER BY date(timestamp)
-    """, (start_date,))
+    """
+    params = [start_date]
     
+    if selected_tickers:
+        query += " AND ticker IN ({})".format(','.join(['?'] * len(selected_tickers)))
+        params.extend(selected_tickers)
+    
+    query += " GROUP BY date(timestamp), bot, ticker ORDER BY date(timestamp)"
+    
+    cursor.execute(query, params)
     data = cursor.fetchall()
     
-    # Convert to pandas DataFrame
-    df = pd.DataFrame(data, columns=['date', 'bot', 'count'])
+    df = pd.DataFrame(data, columns=['date', 'bot', 'count', 'ticker'])
     df['date'] = pd.to_datetime(df['date'])
     
-    # Create charts with consistent colors
     color_map = {'human': '#FF4136', 'live': '#0074D9', 'test': '#2ECC40'}
     
-    # Determine if we should group by week or day
     if timeframe in ['ytd', '1year']:
         df['date'] = df['date'].dt.to_period('W').apply(lambda r: r.start_time)
-        df = df.groupby(['date', 'bot'])['count'].sum().reset_index()
+        df = df.groupby(['date', 'bot', 'ticker'])['count'].sum().reset_index()
         x_title = 'Week'
     else:
         x_title = 'Date'
@@ -497,21 +521,48 @@ def reports():
     fig_time = px.line(df, x='date', y='count', color='bot',
                        title=f'Number of Signals by {"Week" if timeframe in ["ytd", "1year"] else "Day"}',
                        labels={'date': x_title, 'count': 'Number of Signals'},
-                       color_discrete_map=color_map)
+                       color_discrete_map=color_map,
+                       hover_data=['ticker'])
     
     df['day_of_week'] = df['date'].dt.day_name()
-    fig_weekly = px.bar(df.groupby(['day_of_week', 'bot'])['count'].sum().reset_index(),
+    fig_weekly = px.bar(df.groupby(['day_of_week', 'bot', 'ticker'])['count'].sum().reset_index(),
                         x='day_of_week', y='count', color='bot', barmode='group',
                         title='Number of Signals by Day of Week',
                         labels={'count': 'Number of Signals', 'day_of_week': 'Day of Week'},
                         category_orders={'day_of_week': ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']},
-                        color_discrete_map=color_map)
+                        color_discrete_map=color_map,
+                        hover_data=['ticker'])
     
-    # Convert charts to JSON for rendering in the template
-    chart_time = fig_time.to_json()
-    chart_weekly = fig_weekly.to_json()
-    
-    return render_template('reports.html', timeframe=timeframe, chart_time=chart_time, chart_weekly=chart_weekly)
+    def convert_figure_to_dict(fig):
+        fig_dict = fig.to_dict()
+        for trace in fig_dict['data']:
+            for key, value in trace.items():
+                if isinstance(value, np.ndarray):
+                    trace[key] = value.tolist()
+        return fig_dict
+
+    return jsonify({
+        'time_chart': convert_figure_to_dict(fig_time),
+        'weekly_chart': convert_figure_to_dict(fig_weekly)
+    })
+
+def get_start_date(timeframe):
+    end_date = datetime.now()
+    if timeframe == 'ytd':
+        return datetime(end_date.year, 1, 1)
+    elif timeframe == 'mtd':
+        return datetime(end_date.year, end_date.month, 1)
+    elif timeframe == 'qtd':
+        quarter = (end_date.month - 1) // 3 + 1
+        return datetime(end_date.year, 3 * quarter - 2, 1)
+    elif timeframe == '1year':
+        return end_date - timedelta(days=365)
+    elif timeframe == '30days':
+        return end_date - timedelta(days=30)
+    elif timeframe == '1week':
+        return end_date - timedelta(days=7)
+    else:
+        return datetime(end_date.year, end_date.month, 1)  # Default to MTD
 
 if __name__ == '__main__':
     app.run(debug=True)
