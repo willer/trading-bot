@@ -391,8 +391,8 @@ def start_backend():
 
     return "<html><body>Done<br><br><a href=/>Back to Home</a></body></html>"
 
-# GET /show-logs-ibkr?tail=xxx
-@app.get("/show-logs-ibkr")
+# GET /show-logs-broker?tail=xxx
+@app.get("/show-logs-broker")
 def show_logs_ibkr():
     if not is_logged_in():
         return redirect(url_for('login'))
@@ -402,36 +402,14 @@ def show_logs_ibkr():
     else:
         tail = int(tail)
 
-    fname = "start-broker-ibkr-mac-live.sh.log"
+    fname = "start-broker.sh.log"
     if os.path.exists(fname):
         with open(fname) as f:
             # read the last n lines
             lines = f.readlines()
             lines = lines[-tail:]
             lines = "".join(lines)
-            return f"<html><body><h1>IBKR Broker Logs</h1><br><br><a href=/>Back to Home</a><br><br><pre>{lines}</pre></body></html>"
-    else:
-        return "<html><body>File not found<br><br><a href=/>Back to Home</a></body></html>"
-
-# GET /show-logs-alpaca?tail=xxx
-@app.get("/show-logs-alpaca")
-def show_logs_alpaca():
-    if not is_logged_in():
-        return redirect(url_for('login'))
-    tail = request.args.get("tail")
-    if tail == None:
-        tail = 100
-    else:
-        tail = int(tail)
-
-    fname = "start-broker-alpaca-mac.sh.log"
-    if os.path.exists(fname):
-        with open(fname) as f:
-            # read the last n lines
-            lines = f.readlines()
-            lines = lines[-tail:]
-            lines = "".join(lines)
-            return f"<html><body><h1>alpaca Broker Logs</h1><br><br><a href=/>Back to Home</a><br><br><pre>{lines}</pre></body></html>"
+            return f"<html><body><h1>Broker Logs</h1><br><br><a href=/>Back to Home</a><br><br><pre>{lines}</pre></body></html>"
     else:
         return "<html><body>File not found<br><br><a href=/>Back to Home</a></body></html>"
 
@@ -441,6 +419,9 @@ def dashboard_page():
         return redirect(url_for('login'))
     return redirect('/dashboard/')
 
+########################################################################################
+# REPORTS
+########################################################################################
 @app.route('/reports')
 def reports():
     if not is_logged_in():
@@ -499,7 +480,7 @@ def get_chart_data():
     cursor = db.cursor()
     
     query = """
-        SELECT datetime(timestamp) as datetime, date(timestamp) as date, bot, ticker
+        SELECT date(timestamp) as date, bot, ticker
         FROM signals
         WHERE timestamp >= ?
     """
@@ -518,18 +499,8 @@ def get_chart_data():
             'weekly_chart': {'data': [], 'layout': {'title': 'No data available'}}
         })
     
-    df = pd.DataFrame(data, columns=['datetime', 'date', 'bot', 'ticker'])
-    df['datetime'] = pd.to_datetime(df['datetime'])
+    df = pd.DataFrame(data, columns=['date', 'bot', 'ticker'])
     df['date'] = pd.to_datetime(df['date'])
-    
-    # Preprocess the data to change 'human' to 'live' for NQ1! and TQQQ between 4 PM and 8 PM
-    mask = (
-        (df['ticker'].isin(['NQ1!', 'TQQQ'])) &
-        (df['datetime'].dt.hour >= 16) &
-        (df['datetime'].dt.hour < 20) &
-        (df['bot'] == 'human')
-    )
-    df.loc[mask, 'bot'] = 'live'
     
     # Group by date, bot, and ticker
     df_grouped = df.groupby(['date', 'bot', 'ticker']).size().reset_index(name='count')
@@ -543,14 +514,39 @@ def get_chart_data():
     else:
         x_title = 'Date'
     
+    # Sort the dataframe by date to ensure correct ordering
+    df_grouped = df_grouped.sort_values('date')
+    
     fig_time = px.line(df_grouped, x='date', y='count', color='bot',
                        title=f'Number of Signals by {"Week" if timeframe in ["ytd", "1year"] else "Day"}',
                        labels={'date': x_title, 'count': 'Number of Signals'},
                        color_discrete_map=color_map,
                        hover_data=['ticker'])
     
-    # Ensure proper date formatting for x-axis
-    fig_time.update_xaxes(tickformat="%Y-%m-%d" if timeframe not in ['ytd', '1year'] else "%Y-%m-%d")
+    # Ensure proper date formatting for x-axis (dates only, no time)
+    fig_time.update_xaxes(
+        tickformat="%Y-%m-%d",
+        type='date',
+        tickmode='auto',
+        nticks=20,  # Adjust this value to control the number of ticks
+        autorange=True
+    )
+
+    # Update hover template to show only date
+    fig_time.update_traces(
+        hovertemplate='%{x|%Y-%m-%d}<br>Count: %{y}<br>Ticker: %{customdata[0]}<extra></extra>'
+    )
+    
+    # Set the x-axis range to the actual data range
+    if not df_grouped.empty:
+        min_date = df_grouped['date'].min()
+        max_date = df_grouped['date'].max()
+        fig_time.update_xaxes(range=[min_date, max_date])
+
+    # Print debug information
+    print(f"Date range in data: {min_date} to {max_date}")
+    print(f"Number of data points: {len(df_grouped)}")
+    print(df_grouped.head())  # Print the first few rows of the data
     
     df['day_of_week'] = df['date'].dt.day_name()
     fig_weekly = px.bar(df.groupby(['day_of_week', 'bot'])['bot'].count().reset_index(name='count'),
@@ -591,5 +587,8 @@ def get_start_date(timeframe):
     else:
         return datetime(end_date.year, end_date.month, 1)  # Default to MTD
 
+########################################################################################
+# MAIN
+########################################################################################
 if __name__ == '__main__':
     app.run(debug=True)

@@ -8,22 +8,27 @@
         <div class="col">
             <h1>Dashboard</h1>
         </div>
-        <div class="col-auto">
+    </div>
+    
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="mb-2">
+                <a href="{{ url_for('reports') }}" class="btn btn-primary">Reports</a>
+                <a href="/show-logs-broker?tail=500" class="btn btn-primary">Backend Logs</a>
+            </div>
             <div class="btn-group" role="group">
-                <form method="post" action="/stop-backend" style="display: inline-block">
-                    <input type="hidden" name="hash" value="all">
-                    <input type="submit" class="btn btn-danger" value="Stop Backend">
-                </form>
                 <form method="post" action="/start-backend" style="display: inline-block">
                     <input type="hidden" name="hash" value="all">
                     <input type="submit" class="btn btn-success" value="Start Backend">
                 </form>
+                &nbsp;
+                <form method="post" action="/stop-backend" style="display: inline-block">
+                    <input type="hidden" name="hash" value="all">
+                    <input type="submit" class="btn btn-danger" value="Stop Backend">
+                </form>
             </div>
         </div>
-    </div>
-    
-    <div class="row mb-3">
-        <div class="col d-flex justify-content-end">
+        <div class="col-md-6">
             <form method="post" action="/order" class="form-inline">
                 <input type="hidden" name="hash" value="all">
                 <input type="hidden" name="ticker" id="selectedTicker">
@@ -51,14 +56,6 @@
     </div>
     
     <div class="row mb-3">
-        <div class="col">
-            <a href="{{ url_for('reports') }}" class="btn btn-primary">Reports</a>
-            <a href="/show-logs-ibkr?tail=500" class="btn btn-outline-secondary">IBKR Logs</a>
-            <a href="/show-logs-alpaca?tail=500" class="btn btn-outline-secondary">Alpaca Logs</a>
-        </div>
-    </div>
-
-    <div class="row">
         <div class="col">
             <h2>Live Signals</h2>
             <table class="table table-striped">
