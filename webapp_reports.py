@@ -1,5 +1,5 @@
 from flask import jsonify, render_template, request, redirect, url_for
-from webapp_core import app, get_db, is_logged_in
+from webapp_core import app, get_db, get_signals, is_logged_in
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -62,30 +62,31 @@ def get_chart_data():
     
     start_date = get_start_date(timeframe)
     
-    db = get_db()
-    cursor = db.cursor()
-    
-    query = """
-        SELECT date(timestamp) as date, bot, ticker
-        FROM signals
-        WHERE timestamp >= ?
-    """
-    params = [start_date]
-    
+    signals = get_signals() # last 500 signals
+
+    # filter out anything before start_date
+    signals = [signal for signal in signals if signal['timestamp'] >= start_date]
+
+    # filter out any tickers not in selected_tickers
     if selected_tickers:
-        query += " AND ticker IN ({})".format(','.join(['?'] * len(selected_tickers)))
-        params.extend(selected_tickers)
+        signals = [signal for signal in signals if signal['ticker'] in selected_tickers]
+
+    # for reporting, fix any bot=human record that's against NQ1! or TQQQ and is 4pm-8pm to be bot=live
+    for signal in signals:
+        if signal['bot'] == 'human' and (signal['ticker'] == 'NQ1!' or signal['ticker'] == 'TQQQ') and signal['timestamp'].hour >= 16 and signal['timestamp'].hour <= 20:
+            signal['bot'] = 'live'
+
+    # normalize the timestamp field to just the date
+    for signal in signals:
+        signal['date'] = signal['timestamp'].date()
     
-    cursor.execute(query, params)
-    data = cursor.fetchall()
-    
-    if not data:
+    if len(signals) == 0:
         return jsonify({
             'time_chart': {'data': [], 'layout': {'title': 'No data available'}},
             'weekly_chart': {'data': [], 'layout': {'title': 'No data available'}}
         })
     
-    df = pd.DataFrame(data, columns=['date', 'bot', 'ticker'])
+    df = pd.DataFrame(signals)
     df['date'] = pd.to_datetime(df['date'])
     
     # Group by date, bot, and ticker

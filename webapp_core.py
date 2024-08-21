@@ -1,5 +1,6 @@
 
 import configparser
+from datetime import datetime, timedelta
 import hashlib
 import math
 import os
@@ -83,3 +84,31 @@ def add_imports():
 # New function to check if user is logged in
 def is_logged_in():
     return session.get('logged_in', False)
+
+def get_signals():
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("""
+        SELECT datetime(timestamp, 'localtime') as timestamp,
+        ticker,
+        bot,
+        order_action,
+        order_contracts,
+        market_position,
+        market_position_size,
+        order_price,
+        order_message
+        FROM signals
+        order by timestamp desc
+        LIMIT 500
+    """)
+    signals = cursor.fetchall()
+
+    # convert to an editable list of dicts
+    signals = [dict(signal) for signal in signals]
+
+    # fix timestamp to be a datetime object
+    for signal in signals:
+        signal['timestamp'] = datetime.strptime(signal['timestamp'], '%Y-%m-%d %H:%M:%S')
+
+    return signals

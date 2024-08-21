@@ -2,7 +2,7 @@ import datetime
 import hashlib
 import random
 from flask import redirect, render_template, request, url_for
-from webapp_core import app, get_db, is_logged_in, r
+from webapp_core import app, get_db, get_signals, is_logged_in, r
 from datetime import datetime, time as dt_time
 
 @app.route('/dashboard')
@@ -15,23 +15,7 @@ def dashboard_page():
 def dashboard():
     if not is_logged_in():
         return redirect(url_for('login'))
-    db = get_db()
-    cursor = db.cursor()
-    cursor.execute("""
-        SELECT datetime(timestamp, 'localtime') as timestamp,
-        ticker,
-        bot,
-        order_action,
-        order_contracts,
-        market_position,
-        market_position_size,
-        order_price,
-        order_message
-        FROM signals
-        order by timestamp desc
-        LIMIT 500
-    """)
-    signals = cursor.fetchall()
+    signals = get_signals()
     #hashlib.sha1(row['order_message'])
 
     return render_template('dashboard.html', signals=signals, sha1=hashlib.sha1)
@@ -58,14 +42,7 @@ def resend():
     if is_dangerous_time():
         return redirect(url_for('confirm_action', action='resend', params=request.form.get("hash")))
 
-    db = get_db()
-    cursor = db.cursor()
-    cursor.execute("""
-        SELECT order_message
-        FROM signals
-        order by timestamp desc
-    """)
-    signals = cursor.fetchall()
+    signals = get_signals()
     for row in signals:
         if isinstance(row["order_message"], str):
             sha1hash = hashlib.sha1(row["order_message"].encode('utf-8')).hexdigest()
