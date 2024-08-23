@@ -103,6 +103,9 @@ def get_chart_data():
     
     # Sort the dataframe by date to ensure correct ordering
     df_grouped = df_grouped.sort_values('date')
+    app.logger.info(f"First Chart Date range: {df_grouped['date'].min()} to {df_grouped['date'].max()}")
+    app.logger.info(f"First Chart Number of data points: {len(df_grouped)}")
+    app.logger.info(df_grouped.head())
     
     fig_time = px.line(df_grouped, x='date', y='count', color='bot',
                        title=f'Number of Signals by {"Week" if timeframe in ["ytd", "1year"] else "Day"}',
@@ -131,9 +134,9 @@ def get_chart_data():
         fig_time.update_xaxes(range=[min_date, max_date])
 
     # Print debug information
-    print(f"Date range in data: {min_date} to {max_date}")
-    print(f"Number of data points: {len(df_grouped)}")
-    print(df_grouped.head())  # Print the first few rows of the data
+    app.logger.info(f"Date range in data: {min_date} to {max_date}")
+    app.logger.info(f"Grouped Number of data points: {len(df_grouped)}")
+    app.logger.info(df_grouped.head())  # Print the first few rows of the data
     
     df['day_of_week'] = df['date'].dt.day_name()
     fig_weekly = px.bar(df.groupby(['day_of_week', 'bot'])['bot'].count().reset_index(name='count'),

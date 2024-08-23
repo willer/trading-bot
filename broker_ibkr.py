@@ -433,5 +433,10 @@ class broker_ibkr(broker_root):
     def health_check(self):
         self.get_net_liquidity()
         self.get_price('SOXL')
+        self.get_price('SOXS')
+        self.get_price('TQQQ')
+        self.get_price('SQQQ')
+        self.get_price('NQ1!')
+        self.get_price('MNQ1!')
         self.get_position_size('SOXL')
         self.get_position_size('SOXS')

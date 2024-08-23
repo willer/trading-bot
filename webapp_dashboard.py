@@ -1,7 +1,7 @@
 import datetime
 import hashlib
 import random
-from flask import redirect, render_template, request, url_for
+from flask import json, redirect, render_template, request, url_for
 from webapp_core import app, get_db, get_signals, is_logged_in, r
 from datetime import datetime, time as dt_time
 
