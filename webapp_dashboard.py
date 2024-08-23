@@ -1,5 +1,6 @@
 import datetime
 import hashlib
+import os
 import random
 from flask import json, redirect, render_template, request, url_for
 from webapp_core import app, get_db, get_signals, is_logged_in, r
@@ -7,8 +8,6 @@ from datetime import datetime, time as dt_time
 
 @app.route('/dashboard')
 def dashboard_page():
-    if not is_logged_in():
-        return redirect(url_for('login'))
     return redirect('/dashboard/')
 
 @app.get('/dashboard/')
@@ -18,7 +17,7 @@ def dashboard():
     signals = get_signals()
     #hashlib.sha1(row['order_message'])
 
-    return render_template('dashboard.html', signals=signals, sha1=hashlib.sha1)
+    return render_template('dashboard.html', signals=signals, sha1=hashlib.sha1, date=datetime)
 
 def is_dangerous_time():
     now = datetime.now().time()
@@ -100,10 +99,9 @@ def order():
     }
     
     cursor.execute("""
-        INSERT INTO signals (timestamp, ticker, bot, market_position, market_position_size, order_price, order_message) 
+        INSERT INTO signals (ticker, bot, market_position, market_position_size, order_price, order_message) 
         VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (current_time, 
-          ticker.upper(), 
+    """, (ticker.upper(), 
           "human",
           direction,
           position_size,
@@ -181,10 +179,9 @@ def order_action(direction, ticker):
     }
     
     cursor.execute("""
-        INSERT INTO signals (timestamp, ticker, bot, market_position, market_position_size, order_price, order_message) 
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (current_time, 
-          ticker.upper(), 
+        INSERT INTO signals (ticker, bot, market_position, market_position_size, order_price, order_message) 
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (ticker.upper(), 
           "human",
           direction,
           position_size,

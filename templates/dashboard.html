@@ -13,6 +13,9 @@
     <div class="row mb-3">
         <div class="col-md-6">
             <div class="mb-2">
+                Current Time: {{ date.now().strftime('%Y-%m-%d %H:%M:%S') }}
+            </div>
+            <div class="mb-2">
                 <a href="{{ url_for('reports') }}" class="btn btn-primary">Reports</a>
                 <a href="/show-logs-broker?tail=500" class="btn btn-primary">Backend Logs</a>
             </div>
