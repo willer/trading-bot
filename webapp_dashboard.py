@@ -52,7 +52,6 @@ def resend():
             return "<html><body>Found it!<br><br><a href=/>Back to Home</a></body></html>"
     return "<html><body>Didn't find it!<br><br><a href=/>Back to Home</a></body></html>"
 
-# POST /order
 @app.post('/order')
 def order():
     if not is_logged_in():
@@ -63,13 +62,15 @@ def order():
 
     direction = request.form.get("direction")
     ticker = request.form.get("ticker")
+    return process_order(direction, ticker)
 
+def process_order(direction, ticker):
     position_size = 1000000
     if direction == "flat":
         position_size = 0
     # special case for futures, for now
     if direction != "flat":
-        if ticker == "NQ1!" or ticker == "ES1!" or ticker == "GC1!":
+        if ticker in ["NQ1!", "ES1!", "GC1!"]:
             position_size = 1
 
     # Message to send to the broker
@@ -86,87 +87,6 @@ def order():
     # Log the manual activity in the signals table
     db = get_db()
     cursor = db.cursor()
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    # Message to log in the database
-    log_message = {
-        "ticker": ticker.upper(),
-        "strategy": {
-            "bot": "human",  # Log as 'human' in the database
-            "market_position": direction,
-            "market_position_size": position_size,
-        }
-    }
-    
-    cursor.execute("""
-        INSERT INTO signals (ticker, bot, market_position, market_position_size, order_price, order_message) 
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (ticker.upper(), 
-          "human",
-          direction,
-          position_size,
-          "N/A",  # Placeholder for price
-          json.dumps(log_message)))
-    db.commit()
-
-    return f"<html><body>Order submitted and logged!<br>{log_message}<br><a href=/>Back to Home</a></body></html>"
-
-@app.route('/execute_action', methods=['POST'])
-def execute_action():
-    if not is_logged_in():
-        return redirect(url_for('login'))
-    action = request.form.get('action')
-    params = request.form.get('params')
-
-    if action == 'resend':
-        return resend_action(params)
-    elif action == 'order':
-        direction, ticker = params.split(',')
-        return order_action(direction, ticker)
-
-def resend_action(hash_value):
-    db = get_db()
-    cursor = db.cursor()
-    cursor.execute("""
-        SELECT order_message
-        FROM signals
-        order by timestamp desc
-    """)
-    signals = cursor.fetchall()
-    for row in signals:
-        if isinstance(row["order_message"], str):
-            sha1hash = hashlib.sha1(row["order_message"].encode('utf-8')).hexdigest()
-        else:
-            sha1hash = hashlib.sha1(row["order_message"]).hexdigest()
-        if hash_value == sha1hash:
-            r.publish('tradingview', row["order_message"])
-            return "<html><body>Found it!<br><br><a href=/>Back to Home</a></body></html>"
-    return "<html><body>Didn't find it!<br><br><a href=/>Back to Home</a></body></html>"
-
-def order_action(direction, ticker):
-    position_size = 1000000
-    if direction == "flat":
-        position_size = 0
-    # special case for futures, for now
-    if direction != "flat":
-        if ticker == "NQ1!" or ticker == "ES1!" or ticker == "GC1!":
-            position_size = 1
-
-    # Message to send to the broker
-    broker_message = {
-        "ticker": ticker.upper(),
-        "strategy": {
-            "bot": "live",  # Send 'live' to the broker
-            "market_position": direction,
-            "market_position_size": position_size,
-        }
-    }
-    r.publish('tradingview', json.dumps(broker_message))
-
-    # Log the manual activity in the signals table
-    db = get_db()
-    cursor = db.cursor()
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     # Message to log in the database
     log_message = {
@@ -190,6 +110,40 @@ def order_action(direction, ticker):
     db.commit()
 
     return f"<html><body>Order submitted and logged!<br>{log_message}<br><a href=/>Back to Home</a></body></html>"
+
+@app.route('/execute_action', methods=['POST'])
+def execute_action():
+    if not is_logged_in():
+        return redirect(url_for('login'))
+    action = request.form.get('action')
+    params = request.form.get('params')
+
+    if action == 'resend':
+        return resend_action(params)
+    elif action == 'order':
+        direction, ticker = params.split(',')
+        return process_order(direction, ticker)
+    else:
+        return f"<html><body>Unknown action '{action}'<br><br><a href=/>Back to Home</a></body></html>"
+
+def resend_action(hash_value):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("""
+        SELECT order_message
+        FROM signals
+        order by timestamp desc
+    """)
+    signals = cursor.fetchall()
+    for row in signals:
+        if isinstance(row["order_message"], str):
+            sha1hash = hashlib.sha1(row["order_message"].encode('utf-8')).hexdigest()
+        else:
+            sha1hash = hashlib.sha1(row["order_message"]).hexdigest()
+        if hash_value == sha1hash:
+            r.publish('tradingview', row["order_message"])
+            return "<html><body>Found it!<br><br><a href=/>Back to Home</a></body></html>"
+    return "<html><body>Didn't find it!<br><br><a href=/>Back to Home</a></body></html>"
 
 # Modify these routes to require login
 @app.post("/stop-backend")

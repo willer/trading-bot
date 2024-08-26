@@ -59,8 +59,8 @@ def get_chart_data():
     
     timeframe = request.args.get('timeframe', 'mtd')
     selected_tickers = request.args.getlist('tickers')
-    
     start_date = get_start_date(timeframe)
+    app.logger.info(f"Timeframe={timeframe}, Start Date={start_date}, Selected Tickers={selected_tickers}")
     
     signals = get_signals() # last 500 signals
 
@@ -76,27 +76,17 @@ def get_chart_data():
         if signal['bot'] == 'human' and (signal['ticker'] == 'NQ1!' or signal['ticker'] == 'TQQQ') and signal['timestamp'].hour >= 16 and signal['timestamp'].hour <= 20:
             signal['bot'] = 'live'
 
-    # normalize the timestamp field to just the date
-    for signal in signals:
-        signal['date'] = signal['timestamp'].date()
-    
-    if len(signals) == 0:
-        return jsonify({
-            'time_chart': {'data': [], 'layout': {'title': 'No data available'}},
-            'weekly_chart': {'data': [], 'layout': {'title': 'No data available'}}
-        })
-    
     df = pd.DataFrame(signals)
-    df['date'] = pd.to_datetime(df['date'])
-    
-    # Group by date, bot, and ticker
-    df_grouped = df.groupby(['date', 'bot', 'ticker']).size().reset_index(name='count')
+    df['date'] = pd.to_datetime(df['timestamp']).dt.date  # Use timestamp for date, not the normalized date
+
+    # Group by date and bot only
+    df_grouped = df.groupby(['date', 'bot']).size().reset_index(name='count')
     
     color_map = {'human': '#FF4136', 'live': '#0074D9', 'test': '#2ECC40'}
     
     if timeframe in ['ytd', '1year']:
-        df_grouped['date'] = df_grouped['date'].dt.to_period('W').apply(lambda r: r.start_time)
-        df_grouped = df_grouped.groupby(['date', 'bot', 'ticker'])['count'].sum().reset_index()
+        df_grouped['date'] = pd.to_datetime(df_grouped['date']).dt.to_period('W').apply(lambda r: r.start_time)
+        df_grouped = df_grouped.groupby(['date', 'bot'])['count'].sum().reset_index()
         x_title = 'Week'
     else:
         x_title = 'Date'
@@ -110,8 +100,7 @@ def get_chart_data():
     fig_time = px.line(df_grouped, x='date', y='count', color='bot',
                        title=f'Number of Signals by {"Week" if timeframe in ["ytd", "1year"] else "Day"}',
                        labels={'date': x_title, 'count': 'Number of Signals'},
-                       color_discrete_map=color_map,
-                       hover_data=['ticker'])
+                       color_discrete_map=color_map)
     
     # Ensure proper date formatting for x-axis (dates only, no time)
     fig_time.update_xaxes(
@@ -122,9 +111,9 @@ def get_chart_data():
         autorange=True
     )
 
-    # Update hover template to show only date
+    # Update hover template to show only date and count
     fig_time.update_traces(
-        hovertemplate='%{x|%Y-%m-%d}<br>Count: %{y}<br>Ticker: %{customdata[0]}<extra></extra>'
+        hovertemplate='%{x|%Y-%m-%d}<br>Count: %{y}<extra></extra>'
     )
     
     # Set the x-axis range to the actual data range
@@ -138,7 +127,8 @@ def get_chart_data():
     app.logger.info(f"Grouped Number of data points: {len(df_grouped)}")
     app.logger.info(df_grouped.head())  # Print the first few rows of the data
     
-    df['day_of_week'] = df['date'].dt.day_name()
+    # For the weekly chart, we need to filter the original dataframe again
+    df['day_of_week'] = pd.to_datetime(df['date']).dt.day_name()
     fig_weekly = px.bar(df.groupby(['day_of_week', 'bot'])['bot'].count().reset_index(name='count'),
                         x='day_of_week', y='count', color='bot', barmode='group',
                         title='Number of Signals by Day of Week',
