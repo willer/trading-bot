@@ -22,7 +22,7 @@ def reports():
     cursor.execute("""
         SELECT DISTINCT ticker 
         FROM signals 
-        WHERE timestamp >= ? 
+        WHERE timestamp >= %s 
         ORDER BY ticker
     """, (start_date,))
     all_tickers = [row[0] for row in cursor.fetchall()]
@@ -45,7 +45,7 @@ def get_tickers():
     cursor.execute("""
         SELECT DISTINCT ticker 
         FROM signals 
-        WHERE timestamp >= ? 
+        WHERE timestamp >= %s
         ORDER BY ticker
     """, (start_date,))
     tickers = [row[0] for row in cursor.fetchall()]

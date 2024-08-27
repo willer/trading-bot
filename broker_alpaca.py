@@ -195,8 +195,10 @@ class broker_alpaca(broker_root):
         bars = self.dataconn.get_stock_bars(request_params)
         return bars.df
 
-    def health_check(self):
-        self.get_net_liquidity()
+    def health_check_prices(self):
         self.get_price('SOXL')
+
+    def health_check_positions(self):
+        self.get_net_liquidity()
         self.get_position_size('SOXL')
         self.get_position_size('SOXS')

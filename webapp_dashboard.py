@@ -15,9 +15,7 @@ def dashboard():
     if not is_logged_in():
         return redirect(url_for('login'))
     signals = get_signals()
-    #hashlib.sha1(row['order_message'])
-
-    return render_template('dashboard.html', signals=signals, sha1=hashlib.sha1, date=datetime)
+    return render_template('dashboard.html', signals=signals, hashlib=hashlib, date=datetime)
 
 def is_dangerous_time():
     now = datetime.now().time()
@@ -100,7 +98,7 @@ def process_order(direction, ticker):
     
     cursor.execute("""
         INSERT INTO signals (ticker, bot, market_position, market_position_size, order_price, order_message) 
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s)
     """, (ticker.upper(), 
           "human",
           direction,

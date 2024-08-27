@@ -37,15 +37,13 @@ def webhook():
     if data:
         r.publish('tradingview', data)
 
-        #print('got message: ' + request.get_data())
-
         data_dict = request.json
 
         db = get_db()
         cursor = db.cursor()
         cursor.execute("""
             INSERT INTO signals (ticker, bot, order_action, order_contracts, market_position, market_position_size, order_price, order_message) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """, (data_dict['ticker'], 
                 data_dict['strategy']['bot'],
                 data_dict['strategy']['order_action'], 

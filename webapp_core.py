@@ -1,15 +1,14 @@
-
 import configparser
 from datetime import datetime, timedelta
 import hashlib
 import math
 import os
-import sqlite3
+import psycopg2
 import time
 from flask import Flask, g, session
 from flask_sqlalchemy import SQLAlchemy
 import redis
-
+from psycopg2 import pool
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///trade.db'
@@ -26,58 +25,26 @@ p = r.pubsub()
 p.subscribe('health')
 p.get_message(timeout=3)
 
+# Replace SQLite connection pool with PostgreSQL connection pool
+db_pool = psycopg2.pool.SimpleConnectionPool(
+    1, 20,
+    host=config['database']['database-host'],
+    port=config['database']['database-port'],
+    dbname=config['database']['database-name'],
+    user=config['database']['database-user'],
+    password=config['database']['database-password']
+)
+
 def get_db():
     if 'db' not in g:
-        g.db = sqlite3.connect('trade.db')
-        g.db.row_factory = sqlite3.Row
-
+        g.db = db_pool.getconn()
     return g.db
 
-# initial setup of db (if it doesn't exist)
-conn = sqlite3.connect('trade.db')
-cursor = conn.cursor()
-cursor.execute("""
-    CREATE TABLE IF NOT EXISTS signals (
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, 
-        ticker,
-        order_action,
-        order_contracts,
-        order_price,
-        order_message text
-    )
-""")
-conn.commit()
-
-# migrations for db, if you have older schemas
-cursor = conn.cursor()
-try:
-    cursor.execute("ALTER TABLE signals ADD COLUMN order_message text")
-    conn.commit()
-except: pass
-
-cursor = conn.cursor()
-try:
-    cursor.execute("ALTER TABLE signals ADD COLUMN bot text")
-    conn.commit()
-except: pass
-
-cursor = conn.cursor()
-try:
-    cursor.execute("ALTER TABLE signals ADD COLUMN market_position text")
-    conn.commit()
-except: pass
-
-cursor = conn.cursor()
-try:
-    cursor.execute("ALTER TABLE signals ADD COLUMN market_position_size text")
-    conn.commit()
-except: pass
-
-
-@app.context_processor
-def add_imports():
-    # Note: we only define the top-level module names!
-    return dict(hashlib=hashlib, time=time, os=os, math=math)
+@app.teardown_appcontext
+def close_db(error):
+    db = g.pop('db', None)
+    if db is not None:
+        db_pool.putconn(db)
 
 ## ROUTES
 
@@ -89,7 +56,7 @@ def get_signals():
     db = get_db()
     cursor = db.cursor()
     cursor.execute("""
-        SELECT datetime(timestamp, 'localtime') as timestamp,
+        SELECT timestamp,
         ticker,
         bot,
         order_action,
@@ -99,16 +66,17 @@ def get_signals():
         order_price,
         order_message
         FROM signals
-        order by timestamp desc
+        ORDER BY timestamp DESC
         LIMIT 500
     """)
     signals = cursor.fetchall()
 
-    # convert to an editable list of dicts
-    signals = [dict(signal) for signal in signals]
+    # Convert to a list of dicts with column names as keys
+    column_names = [desc[0] for desc in cursor.description]
+    signals = [dict(zip(column_names, signal)) for signal in signals]
 
-    # fix timestamp to be a datetime object
+    # Take out fractional seconds from timestamp
     for signal in signals:
-        signal['timestamp'] = datetime.strptime(signal['timestamp'], '%Y-%m-%d %H:%M:%S')
+        signal['timestamp'] = signal['timestamp'].replace(microsecond=0)
 
     return signals
