@@ -2,6 +2,7 @@ import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 import sqlite3
 from webapp_core import config
+from psycopg2 import pool
 
 def create_postgres_db():
     conn = psycopg2.connect(
@@ -40,6 +41,33 @@ def create_tables():
             order_message TEXT
         )
     """)
+    
+    # Check if the 'id' column exists, and add it if it doesn't
+    cur.execute("""
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name='signals' AND column_name='id'
+    """)
+    if cur.fetchone() is None:
+        cur.execute("""
+            ALTER TABLE signals
+            ADD COLUMN id SERIAL PRIMARY KEY
+        """)
+        print("Added 'id' column to signals table.")
+        
+        # Create a unique index on the id column
+        cur.execute("""
+            CREATE UNIQUE INDEX signals_id_idx ON signals (id)
+        """)
+        print("Created unique index on 'id' column.")
+        
+        # Seed existing records with unique id values
+        cur.execute("""
+            UPDATE signals
+            SET id = DEFAULT
+            WHERE id IS NULL
+        """)
+        print("Seeded existing records with unique id values.")
     
     # Check if the 'processed' column exists, and add it if it doesn't
     cur.execute("""
