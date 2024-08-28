@@ -74,6 +74,7 @@ async def check_messages():
 
                     if aconfig['driver'] not in drivers_checked:
                         drivers_checked[aconfig['driver']] = True
+                        print(f"health check for prices for driver {aconfig['driver']}")
                         driver.health_check_prices()
 
                     driver.health_check_positions()
