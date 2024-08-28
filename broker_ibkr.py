@@ -337,24 +337,10 @@ class broker_ibkr(broker_root):
             trade = self.conn.placeOrder(stock, order)
             print("    trade: ", trade)
 
-            # wait for the order to be filled, up to 30s
-            maxloops = 15
-            print("    waiting for trade1: ", trade)
-            while trade.orderStatus.status not in ['Filled','Cancelled','ApiCancelled'] and maxloops > 0:
-                #self.conn.sleep(1)
-                await asyncio.sleep(1)
-                print("    waiting for trade2: ", trade)
-                maxloops -= 1
+            return trade  # Return the order ID
 
-            await asyncio.sleep(1)
-
-            # throw exception on order failure
-            if trade.orderStatus.status not in ['Filled']:
-                msg = f"ORDER FAILED in status {trade.orderStatus.status}: set_position_size({self.account},{symbol},{stock},{amount},{stock.round_precision}) -> {trade.orderStatus}"
-                print(msg)
-                self.handle_ex(msg)
-
-            print("order filled")
+    async def is_trade_completed(self, trade):
+        return trade.orderStatus.status in ['Filled', 'Cancelled', 'ApiCancelled']
 
     def download_data(self, symbol, end, duration, barlength, cachedata=False):
         print(f"download_data({symbol},{end},{duration},{barlength})")

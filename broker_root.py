@@ -1,4 +1,3 @@
-
 from unittest import skip
 from textmagic.rest import TextmagicRestClient
 import traceback
@@ -36,6 +35,9 @@ class broker_root:
         pass
 
     async def set_position_size(self, symbol, amount):
+        pass
+
+    async def is_trade_completed(self, trade):
         pass
 
     def download_data(self, symbol, end, duration, timeframe):

@@ -158,24 +158,11 @@ class broker_alpaca(broker_root):
             print("  placing order: ", limit_order_data)
             trade = self.conn.submit_order(order_data=limit_order_data)
             print("    trade: ", trade)
+            return trade.id  # Return the order ID
 
-            # wait for the order to be filled, up to 30s
-            maxloops = 30
-            print("    waiting for trade1: ", trade)
-            trade = self.conn.get_order_by_id(trade.id)
-            while trade.status in ['new','partially_filled'] and maxloops > 0:
-                await asyncio.sleep(1)
-                print("    waiting for trade2: ", trade)
-                maxloops -= 1
-                trade = self.conn.get_order_by_id(trade.id)
-
-            # throw exception on order failure
-            if trade.status not in ['filled']:
-                msg = f"ORDER FAILED: set_position_size({symbol},{amount}) acct {self.account} -> {trade.status}"
-                print(msg)
-                self.handle_ex(msg)
-
-            print("order filled")
+    async def is_trade_completed(self, order_id):
+        trade = self.conn.get_order_by_id(order_id)
+        return trade.status in ['filled', 'canceled', 'expired']
 
     def download_data(self, symbol, end, duration, timeframe, cachedata=False):
         if end != "":

@@ -1,3 +1,4 @@
+import time
 import redis, json
 import asyncio, datetime
 import sys
@@ -48,6 +49,27 @@ accounts = accountlist.split(",")
 
 
 print("Waiting for webhook messages...")
+async def execute_trades(trades):
+    tasks = [driver.set_position_size(symbol, amount) for driver, symbol, amount in trades]
+    order_ids = await asyncio.gather(*tasks)
+    return list(zip([driver for driver, _, _ in trades], order_ids))
+
+async def wait_for_trades(drivers_and_orders, timeout=30):
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        incomplete_trades = []
+        for driver, order_id in drivers_and_orders:
+            if not await driver.is_trade_completed(order_id):
+                incomplete_trades.append((driver, order_id))
+        
+        if not incomplete_trades:
+            return True  # All trades completed
+        
+        drivers_and_orders = incomplete_trades
+        await asyncio.sleep(1)
+    
+    return False  # Timeout reached, some trades incomplete
+
 async def check_messages():
 
     #print(f"{time.time()} - checking for tradingview webhook messages")
@@ -62,7 +84,6 @@ async def check_messages():
                 print("health check received")
                 drivers_checked = {}
                 for account in accounts:
-                    print("checking account",account)
                     config.read('config.ini')
                     aconfig = config[account]
                     if aconfig['driver'] == 'ibkr':
@@ -74,9 +95,10 @@ async def check_messages():
 
                     if aconfig['driver'] not in drivers_checked:
                         drivers_checked[aconfig['driver']] = True
-                        print(f"health check for prices for driver {aconfig['driver']}")
+                        print(f"health check for prices with driver {aconfig['driver']}")
                         driver.health_check_prices()
 
+                    print("checking positions for account",account)
                     driver.health_check_positions()
 
                 r.publish('health', 'ok')
@@ -110,6 +132,7 @@ async def check_messages():
             market_position_size_orig  = data_dict['strategy']['market_position_size']   # desired position after order per TV
 
 
+            trades = []
             for account in accounts:
                 ## PLACING THE ORDER
 
@@ -133,7 +156,7 @@ async def check_messages():
 
                 # check for futures permissions (default is allow)
                 order_stock = driver.get_stock(order_symbol)
-                if order_stock.is_futures and aconfig.get('use-futures', 'yes') == 'no':
+                if order_stock.is_futures and aconfig.get('use-futures', 'no') == 'no':
                     print("this account doesn't allow futures; skipping")
                     continue
 
@@ -228,10 +251,23 @@ async def check_messages():
                 # now let's go ahead and place the order to reach the desired position
                 if desired_position != current_position:
                     print(f"sending order to reach desired position of {desired_position} shares")
-                    await driver.set_position_size(order_symbol, desired_position)
+                    trades.append((driver, order_symbol, desired_position))
                 else:
                     print('desired quantity is the same as the current quantity.  No order placed.')
 
+            if trades:
+                print("executing trades")
+                drivers_and_orders = await execute_trades(trades)
+                print("waiting for trades to complete")
+                all_completed = await wait_for_trades(drivers_and_orders)
+
+                if not all_completed:
+                    incomplete_accounts = [account for (driver, _), account in zip(drivers_and_orders, accounts) if not await driver.is_trade_completed(_)]
+                    error_msg = f"ORDER FAILED: Timeout reached for accounts: {', '.join(incomplete_accounts)}"
+                    print(error_msg)
+                    handle_ex(error_msg)
+                else:
+                    print("All orders filled successfully")
 
         except Exception as e:
             handle_ex(e)
