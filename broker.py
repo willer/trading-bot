@@ -59,8 +59,8 @@ async def check_messages():
 
         if message['data'] == b'health check':
             try:
-                print("health check received; checking every account")
-                driver.health_check_prices()
+                print("health check received")
+                drivers_checked = {}
                 for account in accounts:
                     print("checking account",account)
                     config.read('config.ini')
@@ -71,6 +71,11 @@ async def check_messages():
                         driver = broker_alpaca(bot, account)
                     else:
                         raise Exception("Unknown driver: " + aconfig['driver'])
+
+                    if aconfig['driver'] not in drivers_checked:
+                        drivers_checked[aconfig['driver']] = True
+                        driver.health_check_prices()
+
                     driver.health_check_positions()
 
                 r.publish('health', 'ok')
