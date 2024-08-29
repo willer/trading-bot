@@ -1,5 +1,4 @@
-from unittest import skip
-from textmagic.rest import TextmagicRestClient
+from twilio.rest import Client
 import traceback
 
 class broker_root:
@@ -7,16 +6,20 @@ class broker_root:
         pass
 
     def handle_ex(self, e):
-        tmu = self.config['DEFAULT'].get('textmagic-username','')
-        tmk = self.config['DEFAULT'].get('textmagic-key','')
-        tmp = self.config['DEFAULT'].get('textmagic-phone','')
-        if tmu != '' and tmk != '' and tmp != '':
-            tmc = TextmagicRestClient(tmu, tmk)
+        account_sid = self.config['DEFAULT'].get('twilio-account-sid', '')
+        auth_token = self.config['DEFAULT'].get('twilio-auth-token', '')
+        from_phone = self.config['DEFAULT'].get('twilio-from-phone', '')
+        to_phone = self.config['DEFAULT'].get('twilio-to-phone', '')
+        if account_sid and auth_token and from_phone and to_phone:
+            client = Client(account_sid, auth_token)
             # if e is a string send it, otherwise send the first 300 chars of the traceback
-            if isinstance(e, str):
-                message = tmc.messages.create(phones=tmp, text=f"broker-ibkr " + self.bot + " FAIL " + e)
-            else:
-                message = tmc.messages.create(phones=tmp, text=f"broker-ibkr " + self.bot + " FAIL " + traceback.format_exc()[0:300])
+            message_body = f"broker-ibkr {self.bot} FAIL "
+            message_body += e if isinstance(e, str) else traceback.format_exc()[:300]
+            message = client.messages.create(
+                body=message_body,
+                from_=from_phone,
+                to=to_phone
+            )
 
     # function to round to the nearest decimal. y=10 for dimes, y=4 for quarters, y=100 for pennies
     def x_round(self,x,y):

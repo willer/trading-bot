@@ -1,6 +1,6 @@
 import hashlib
 from flask import redirect, render_template, request, session, url_for
-from webapp_core import app, get_db, is_logged_in, USER_CREDENTIALS, r, p
+from webapp_core import app, get_db, is_logged_in, USER_CREDENTIALS, publish_signal, r, p
 import webapp_reports
 import webapp_dashboard
 
@@ -35,25 +35,8 @@ def webhook():
     data = request.data
 
     if data:
-        r.publish('tradingview', data)
-
         data_dict = request.json
-
-        db = get_db()
-        cursor = db.cursor()
-        cursor.execute("""
-            INSERT INTO signals (ticker, bot, order_action, order_contracts, market_position, market_position_size, order_price, order_message) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """, (data_dict['ticker'], 
-                data_dict['strategy']['bot'],
-                data_dict['strategy']['order_action'], 
-                data_dict['strategy']['order_contracts'],
-                data_dict['strategy']['market_position'],
-                data_dict['strategy']['market_position_size'],
-                data_dict['strategy']['order_price'],
-                request.get_data()))
-        db.commit()
-
+        publish_signal(data_dict)
         return data
 
     return {"code": "success"}

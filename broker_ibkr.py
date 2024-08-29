@@ -67,6 +67,7 @@ class broker_ibkr(broker_root):
 
             elif symbol in ['SOXL','SOXS']:
                 stock = Stock(symbol, 'ARCA', 'USD')
+                #stock = Stock(symbol, 'SMART', 'USD')
                 stock.is_futures = 0
                 stock.round_precision = 100
                 stock.market_order = False

@@ -30,7 +30,7 @@
                 </form>
             </div>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-6 d-flex justify-content-end">
             <form method="post" action="/order" class="form-inline">
                 <input type="hidden" name="hash" value="all">
                 <input type="hidden" name="ticker" id="selectedTicker">
@@ -41,6 +41,7 @@
                             <button type="button" data-ticker="TQQQ" class="btn btn-outline-primary btn-sm">TQQQ</button>
                             <button type="button" data-ticker="NQ1!" class="btn btn-outline-primary btn-sm">NQ1!</button>
                             <button type="button" data-ticker="SOXL" class="btn btn-outline-primary btn-sm">SOXL</button>
+                            <button type="button" data-ticker="TQQQ;NQ1!;SOXL" class="btn btn-outline-primary btn-sm">ALL</button>
                         </div>
                     </div>
                     <div class="col-auto">
@@ -51,7 +52,7 @@
                         </div>
                     </div>
                     <div class="col-12 mt-2">
-                        <button type="submit" class="btn btn-primary btn-sm w-100">Submit Order</button>
+                        <button type="submit" class="btn btn-primary btn-sm w-40">Submit Order</button>
                     </div>
                 </div>
             </form>

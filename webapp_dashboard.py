@@ -3,7 +3,7 @@ import hashlib
 import os
 import random
 from flask import json, redirect, render_template, request, url_for
-from webapp_core import app, get_db, get_signals, is_logged_in, r
+from webapp_core import app, get_db, get_signal, get_signals, is_logged_in, publish_signal, r
 from datetime import datetime, time as dt_time
 
 @app.route('/dashboard')
@@ -31,7 +31,8 @@ def confirm_action():
     y = random.randint(-10, 30)
     return render_template('confirm_action.html', action=action, params=params, x=x, y=y)
 
-# POST /resend?hash=xxx
+# POST /resend?id=xxx
+# resend a signal to the broker
 @app.post('/resend')
 def resend():
     if not is_logged_in():
@@ -39,17 +40,17 @@ def resend():
     if is_dangerous_time():
         return redirect(url_for('confirm_action', action='resend', params=request.form.get("hash")))
 
-    signals = get_signals()
-    for row in signals:
-        if isinstance(row["order_message"], str):
-            sha1hash = hashlib.sha1(row["order_message"].encode('utf-8')).hexdigest()
-        else:
-            sha1hash = hashlib.sha1(row["order_message"]).hexdigest()
-        if request.form.get("hash") == sha1hash:
-            r.publish('tradingview', row["order_message"])
-            return "<html><body>Found it!<br><br><a href=/>Back to Home</a></body></html>"
-    return "<html><body>Didn't find it!<br><br><a href=/>Back to Home</a></body></html>"
+    id = int(request.form.get("id"))
+    signal = get_signal(id)
+    if signal:
+        data_dict = json.loads(signal["order_message"])
+        publish_signal(signal)
+        return "<html><body>Found it!<br><br><a href=/>Back to Home</a></body></html>"
+    else:
+        return "<html><body>Didn't find it!<br><br><a href=/>Back to Home</a></body></html>"
 
+# POST /order
+# manual order submission
 @app.post('/order')
 def order():
     if not is_logged_in():
@@ -60,7 +61,10 @@ def order():
 
     direction = request.form.get("direction")
     ticker = request.form.get("ticker")
-    return process_order(direction, ticker)
+    tickers = ticker.split(';')
+    for ticker in tickers:
+        process_order(direction, ticker)
+    return "<html><body>Orders submitted and logged!<br><a href=/>Back to Home</a></body></html>"
 
 def process_order(direction, ticker):
     position_size = 1000000
@@ -107,8 +111,6 @@ def process_order(direction, ticker):
           json.dumps(log_message)))
     db.commit()
 
-    return f"<html><body>Order submitted and logged!<br>{log_message}<br><a href=/>Back to Home</a></body></html>"
-
 @app.route('/execute_action', methods=['POST'])
 def execute_action():
     if not is_logged_in():
@@ -120,7 +122,10 @@ def execute_action():
         return resend_action(params)
     elif action == 'order':
         direction, ticker = params.split(',')
-        return process_order(direction, ticker)
+        tickers = ticker.split(';')
+        for ticker in tickers:
+            process_order(direction, ticker)
+        return "<html><body>Orders submitted and logged!<br><a href=/>Back to Home</a></body></html>"
     else:
         return f"<html><body>Unknown action '{action}'<br><br><a href=/>Back to Home</a></body></html>"
 

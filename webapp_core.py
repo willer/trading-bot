@@ -1,10 +1,5 @@
 import configparser
-from datetime import datetime, timedelta
-import hashlib
-import math
-import os
 import psycopg2
-import time
 from flask import Flask, g, session
 from flask_sqlalchemy import SQLAlchemy
 import redis
@@ -55,20 +50,7 @@ def is_logged_in():
 def get_signals():
     db = get_db()
     cursor = db.cursor()
-    cursor.execute("""
-        SELECT timestamp,
-        ticker,
-        bot,
-        order_action,
-        order_contracts,
-        market_position,
-        market_position_size,
-        order_price,
-        order_message
-        FROM signals
-        ORDER BY timestamp DESC
-        LIMIT 500
-    """)
+    cursor.execute("SELECT * FROM signals ORDER BY timestamp DESC LIMIT 500")
     signals = cursor.fetchall()
 
     # Convert to a list of dicts with column names as keys
@@ -80,3 +62,33 @@ def get_signals():
         signal['timestamp'] = signal['timestamp'].replace(microsecond=0)
 
     return signals
+
+def get_signal(id):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("SELECT * FROM signals WHERE id = %s", (id,))
+    signal = cursor.fetchone()
+
+    if signal:
+        # convert to a dict
+        signal = dict(zip([desc[0] for desc in cursor.description], signal))
+        # take out fractional seconds from timestamp
+        signal['timestamp'] = signal['timestamp'].replace(microsecond=0)
+        return signal
+    else:
+        return None
+
+def publish_signal(data_dict):
+    r.publish('tradingview', data_dict)
+
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("""
+        INSERT INTO signals (ticker, bot, order_action, order_contracts, market_position, market_position_size, order_price, order_message) 
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    """, (data_dict['ticker'], 
+            data_dict['strategy']['bot'],
+            data_dict['strategy']['order_action'], 
+            data_dict['strategy']['order_contracts'],
+            data_dict['strategy']['market_position'],))
+    db.commit()

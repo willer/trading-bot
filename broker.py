@@ -5,7 +5,7 @@ import sys
 import nest_asyncio
 import configparser
 import traceback
-from textmagic.rest import TextmagicRestClient
+from twilio.rest import Client
 
 nest_asyncio.apply()
 
@@ -27,16 +27,20 @@ config = configparser.ConfigParser()
 config.read('config.ini')
 
 def handle_ex(e):
-    tmu = config['DEFAULT']['textmagic-username']
-    tmk = config['DEFAULT']['textmagic-key']
-    tmp = config['DEFAULT']['textmagic-phone']
-    if tmu != '':
-        tmc = TextmagicRestClient(tmu, tmk)
+    account_sid = config['DEFAULT'].get('twilio-account-sid')
+    auth_token = config['DEFAULT'].get('twilio-auth-token')
+    from_phone = config['DEFAULT'].get('twilio-from-phone')
+    to_phone = config['DEFAULT'].get('twilio-to-phone')
+    if account_sid and auth_token and from_phone and to_phone:
+        client = Client(account_sid, auth_token)
         # if e is a string send it, otherwise send the first 300 chars of the traceback
-        if isinstance(e, str):
-            message = tmc.messages.create(phones=tmp, text="broker-ibkr " + bot + " FAIL " + e)
-        else:
-            message = tmc.messages.create(phones=tmp, text="broker-ibkr " + bot + " FAIL " + traceback.format_exc()[0:300])
+        message_body = f"broker-ibkr {bot} FAIL "
+        message_body += e if isinstance(e, str) else traceback.format_exc()[:300]
+        message = client.messages.create(
+            body=message_body,
+            from_=from_phone,
+            to=to_phone
+        )
 
 # connect to Redis and subscribe to tradingview messages
 r = redis.Redis(host='localhost', port=6379, db=0)
