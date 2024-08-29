@@ -8,9 +8,21 @@
     <style>
         body {
             background-color: #f8f9fa;
+            font-size: 16px;
         }
         .content-container {
             margin-top: 20px;
+        }
+        @media (max-width: 576px) {
+            body {
+                font-size: 14px;
+            }
+            h1 {
+                font-size: 1.5rem;
+            }
+            h2 {
+                font-size: 1.25rem;
+            }
         }
     </style>
     {% block extra_css %}{% endblock %}

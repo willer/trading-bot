@@ -3,31 +3,30 @@
 {% block title %}Dashboard{% endblock %}
 
 {% block content %}
-<div class="container">
+<div class="container-fluid">
     <div class="row mb-3">
         <div class="col">
-            <h1>Dashboard</h1>
+            <h1 class="h2">Dashboard</h1>
         </div>
     </div>
     
     <div class="row mb-3">
-        <div class="col-md-6">
+        <div class="col-md-6 mb-3 mb-md-0">
             <div class="mb-2">
                 Current Time: {{ date.now().strftime('%Y-%m-%d %H:%M:%S') }}
             </div>
             <div class="mb-2">
-                <a href="{{ url_for('reports') }}" class="btn btn-primary">Reports</a>
-                <a href="/show-logs-broker?tail=500" class="btn btn-primary">Backend Logs</a>
+                <a href="{{ url_for('reports') }}" class="btn btn-primary btn-sm mb-1">Reports</a>
+                <a href="/show-logs-broker?tail=500" class="btn btn-primary btn-sm mb-1">Backend Logs</a>
             </div>
             <div class="btn-group" role="group">
-                <form method="post" action="/start-backend" style="display: inline-block">
+                <form method="post" action="/start-backend" class="me-1">
                     <input type="hidden" name="hash" value="all">
-                    <input type="submit" class="btn btn-success" value="Start Backend">
+                    <input type="submit" class="btn btn-success btn-sm" value="Start Backend">
                 </form>
-                &nbsp;
-                <form method="post" action="/stop-backend" style="display: inline-block">
+                <form method="post" action="/stop-backend">
                     <input type="hidden" name="hash" value="all">
-                    <input type="submit" class="btn btn-danger" value="Stop Backend">
+                    <input type="submit" class="btn btn-danger btn-sm" value="Stop Backend">
                 </form>
             </div>
         </div>
@@ -36,22 +35,23 @@
                 <input type="hidden" name="hash" value="all">
                 <input type="hidden" name="ticker" id="selectedTicker">
                 <input type="hidden" name="direction" id="selectedDirection">
-                <div class="row justify-content-end">
+                <div class="row g-2">
                     <div class="col-auto">
-                        <div class="list-group" id="tickerButtons">
-                            <button type="button" data-ticker="TQQQ" class="list-group-item list-group-item-action">TQQQ</button>
-                            <button type="button" data-ticker="NQ1!" class="list-group-item list-group-item-action">NQ1!</button>
-                            <button type="button" data-ticker="SOXL" class="list-group-item list-group-item-action">SOXL</button>
+                        <div class="btn-group-vertical" id="tickerButtons">
+                            <button type="button" data-ticker="TQQQ" class="btn btn-outline-primary btn-sm">TQQQ</button>
+                            <button type="button" data-ticker="NQ1!" class="btn btn-outline-primary btn-sm">NQ1!</button>
+                            <button type="button" data-ticker="SOXL" class="btn btn-outline-primary btn-sm">SOXL</button>
                         </div>
                     </div>
                     <div class="col-auto">
-                        <div class="list-group" id="directionButtons">
-                            <button type="button" data-direction="long" class="list-group-item list-group-item-action list-group-item-success">long</button>
-                            <button type="button" data-direction="flat" class="list-group-item list-group-item-action list-group-item-light">flat</button>
-                            <button type="button" data-direction="short" class="list-group-item list-group-item-action list-group-item-danger">short</button>
-                            <div style="margin-top: 3px;"></div>
-                            <button type="submit" class="btn btn-primary">Submit Order</button>
+                        <div class="btn-group-vertical" id="directionButtons">
+                            <button type="button" data-direction="long" class="btn btn-outline-success btn-sm">long</button>
+                            <button type="button" data-direction="flat" class="btn btn-outline-secondary btn-sm">flat</button>
+                            <button type="button" data-direction="short" class="btn btn-outline-danger btn-sm">short</button>
                         </div>
+                    </div>
+                    <div class="col-12 mt-2">
+                        <button type="submit" class="btn btn-primary btn-sm w-100">Submit Order</button>
                     </div>
                 </div>
             </form>
