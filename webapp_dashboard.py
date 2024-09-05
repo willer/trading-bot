@@ -84,32 +84,8 @@ def process_order(direction, ticker):
             "market_position_size": position_size,
         }
     }
-    r.publish('tradingview', json.dumps(broker_message))
+    publish_signal(broker_message)
 
-    # Log the manual activity in the signals table
-    db = get_db()
-    cursor = db.cursor()
-    
-    # Message to log in the database
-    log_message = {
-        "ticker": ticker.upper(),
-        "strategy": {
-            "bot": "human",  # Log as 'human' in the database
-            "market_position": direction,
-            "market_position_size": position_size,
-        }
-    }
-    
-    cursor.execute("""
-        INSERT INTO signals (ticker, bot, market_position, market_position_size, order_price, order_message) 
-        VALUES (%s, %s, %s, %s, %s, %s)
-    """, (ticker.upper(), 
-          "human",
-          direction,
-          position_size,
-          "N/A",  # Placeholder for price
-          json.dumps(log_message)))
-    db.commit()
 
 @app.route('/execute_action', methods=['POST'])
 def execute_action():
@@ -129,24 +105,14 @@ def execute_action():
     else:
         return f"<html><body>Unknown action '{action}'<br><br><a href=/>Back to Home</a></body></html>"
 
-def resend_action(hash_value):
-    db = get_db()
-    cursor = db.cursor()
-    cursor.execute("""
-        SELECT order_message
-        FROM signals
-        order by timestamp desc
-    """)
-    signals = cursor.fetchall()
-    for row in signals:
-        if isinstance(row["order_message"], str):
-            sha1hash = hashlib.sha1(row["order_message"].encode('utf-8')).hexdigest()
-        else:
-            sha1hash = hashlib.sha1(row["order_message"]).hexdigest()
-        if hash_value == sha1hash:
-            r.publish('tradingview', row["order_message"])
-            return "<html><body>Found it!<br><br><a href=/>Back to Home</a></body></html>"
-    return "<html><body>Didn't find it!<br><br><a href=/>Back to Home</a></body></html>"
+def resend_action(id):
+    signal = get_signal(id)
+    if signal:
+        data_dict = json.loads(signal["order_message"])
+        publish_signal(data_dict)
+        return "<html><body>Found it!<br><br><a href=/>Back to Home</a></body></html>"
+    else:
+        return "<html><body>Didn't find it!<br><br><a href=/>Back to Home</a></body></html>"
 
 # Modify these routes to require login
 @app.post("/stop-backend")

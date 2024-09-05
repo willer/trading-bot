@@ -1,4 +1,6 @@
 import time
+import psycopg2
+from psycopg2 import pool
 import redis, json
 import asyncio, datetime
 import sys
@@ -25,6 +27,36 @@ last_time_traded = {}
 
 config = configparser.ConfigParser()
 config.read('config.ini')
+
+
+# Replace SQLite connection pool with PostgreSQL connection pool
+db_pool = psycopg2.pool.SimpleConnectionPool(
+    1, 20,
+    host=config['database']['database-host'],
+    port=config['database']['database-port'],
+    dbname=config['database']['database-name'],
+    user=config['database']['database-user'],
+    password=config['database']['database-password']
+)
+
+dbconn = None
+def get_db():
+    global dbconn
+    if dbconn is None:
+        dbconn = db_pool.getconn()
+    return dbconn
+
+def update_signal(id, data_dict):
+    db = get_db()
+    sql = "UPDATE signals SET "
+    for key, value in data_dict.items():
+        sql += f"{key} = %s, "
+    sql = sql[:-2] + " WHERE id = %s"
+    cursor = db.cursor()
+    cursor.execute(sql, tuple(data_dict.values()) + (id,))
+    db.commit()
+
+
 
 def handle_ex(e):
     account_sid = config['DEFAULT'].get('twilio-account-sid')
@@ -58,7 +90,7 @@ async def execute_trades(trades):
     order_ids = await asyncio.gather(*tasks)
     return list(zip([driver for driver, _, _ in trades], order_ids))
 
-async def wait_for_trades(drivers_and_orders, timeout=30):
+async def wait_for_trades(drivers_and_orders, signal_id, timeout=30):
     start_time = time.time()
     while time.time() - start_time < timeout:
         incomplete_trades = []
@@ -67,6 +99,9 @@ async def wait_for_trades(drivers_and_orders, timeout=30):
                 incomplete_trades.append((driver, order_id))
         
         if not incomplete_trades:
+            if signal_id:
+                update_signal(signal_id, {'processed': datetime.datetime.now().isoformat()})
+            print(f"All trades for signal {signal_id} completed")
             return True  # All trades completed
         
         drivers_and_orders = incomplete_trades
@@ -134,6 +169,7 @@ async def check_messages():
             order_symbol_orig          = data_dict['ticker']                             # ticker for which TV order was sent
             market_position_orig       = data_dict['strategy']['market_position']        # order direction: long, short, or flat
             market_position_size_orig  = data_dict['strategy']['market_position_size']   # desired position after order per TV
+            signal_id = data_dict['strategy'].get('id', None)
 
 
             trades = []
@@ -263,7 +299,7 @@ async def check_messages():
                 print("executing trades")
                 drivers_and_orders = await execute_trades(trades)
                 print("waiting for trades to complete")
-                all_completed = await wait_for_trades(drivers_and_orders)
+                all_completed = await wait_for_trades(drivers_and_orders, signal_id)
 
                 if not all_completed:
                     incomplete_accounts = [account for (driver, _), account in zip(drivers_and_orders, accounts) if not await driver.is_trade_completed(_)]

@@ -38,16 +38,18 @@
                 <div class="row g-2">
                     <div class="col-auto">
                         <div class="btn-group-vertical" id="tickerButtons">
-                            <button type="button" data-ticker="TQQQ" class="btn btn-outline-primary btn-sm">TQQQ</button>
-                            <button type="button" data-ticker="NQ1!" class="btn btn-outline-primary btn-sm">NQ1!</button>
+                            <button type="button" data-ticker="NQ1!" class="btn btn-outline-primary btn-sm">NQ</button>
                             <button type="button" data-ticker="SOXL" class="btn btn-outline-primary btn-sm">SOXL</button>
+                            <button type="button" data-ticker="TQQQ;NQ1!" class="btn btn-outline-primary btn-sm">TQQQ+NQ</button>
                             <button type="button" data-ticker="TQQQ;NQ1!;SOXL" class="btn btn-outline-primary btn-sm">ALL</button>
                         </div>
                     </div>
                     <div class="col-auto">
                         <div class="btn-group-vertical" id="directionButtons">
                             <button type="button" data-direction="long" class="btn btn-outline-success btn-sm">long</button>
+                            <button type="button" data-direction="halflong" class="btn btn-outline-success btn-sm">half long</button>
                             <button type="button" data-direction="flat" class="btn btn-outline-secondary btn-sm">flat</button>
+                            <button type="button" data-direction="halfshort" class="btn btn-outline-danger btn-sm">half short</button>
                             <button type="button" data-direction="short" class="btn btn-outline-danger btn-sm">short</button>
                         </div>
                     </div>
@@ -71,19 +73,21 @@
                         <th>Mkt Pos</th>
                         <th>Mkt Pos Size</th>
                         <th>Price at that Time</th>
+                        <th>Processed</th>
                         <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for signal in signals %}
                     {% if signal.bot == 'live' or signal.bot == 'human' %}
-                    <tr class="{{ 'table-success' if signal.market_position=='long' else 'table-danger' if signal.market_position=='short' else '' }} !important">
+                    <tr class="{{ 'table-success' if 'long' in signal.market_position else 'table-danger' if 'short' in signal.market_position else '' }} !important">
                         <td>{{ signal.timestamp }}</td>
                         <td>{{ signal.bot or "" }}</td>
                         <td>{{ signal.ticker }}</td>
                         <td>{{ signal.market_position or "" }}</td>
                         <td>{{ signal.market_position_size or "" }}</td>
                         <td>{{ "%.2f"|format(signal.order_price|float) if signal.order_price != '0.00' else "" }}</td>
+                        <td>{{ signal.processed or "" }}</td>
                         <td>
                             <form method=post action=/resend>
                                 {% if signal.order_message is string %}

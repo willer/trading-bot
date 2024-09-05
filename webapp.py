@@ -1,4 +1,5 @@
 import hashlib
+import traceback
 from flask import redirect, render_template, request, session, url_for
 from webapp_core import app, get_db, is_logged_in, USER_CREDENTIALS, publish_signal, r, p
 import webapp_reports
@@ -36,8 +37,14 @@ def webhook():
 
     if data:
         data_dict = request.json
-        publish_signal(data_dict)
-        return data
+        try:
+            publish_signal(data_dict)
+        except Exception as e:
+            app.logger.error(f"Error publishing signal: {e}; data: {data_dict}; traceback: {traceback.format_exc()}")
+            return {"code": "failure", "message": str(e)}, 500
+    else:
+        app.logger.error(f"No data received")
+        return {"code": "failure", "message": "No data received"}, 400
 
     return {"code": "success"}
 

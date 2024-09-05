@@ -11,6 +11,6 @@ while true; do
 	py=`which python`
 	if [ -z "$py" ]; then py=`which python3`; fi
 	"$py" -u broker.py live 2>&1 |tee -a $logfile
-	echo Restarting in 15s |tee -a $logfile
-	sleep 15
+	echo Restarting in 2s |tee -a $logfile
+	sleep 2
 done
