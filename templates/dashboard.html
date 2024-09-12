@@ -73,32 +73,20 @@
                         <th>Mkt Pos</th>
                         <th>Mkt Pos Size</th>
                         <th>Price at that Time</th>
-                        <th>Processed</th>
-                        <th>Action</th>
+                        <th>Processed (sec)</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for signal in signals %}
                     {% if signal.bot == 'live' or signal.bot == 'human' %}
                     <tr class="{{ 'table-success' if 'long' in signal.market_position else 'table-danger' if 'short' in signal.market_position else '' }} !important">
-                        <td>{{ signal.timestamp }}</td>
-                        <td>{{ signal.bot or "" }}</td>
+                        <td><nobr>{{ signal.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</nobr></td>
+                        <td>{{ signal.bot }}</td>
                         <td>{{ signal.ticker }}</td>
                         <td>{{ signal.market_position or "" }}</td>
                         <td>{{ signal.market_position_size or "" }}</td>
-                        <td>{{ "%.2f"|format(signal.order_price|float) if signal.order_price != '0.00' else "" }}</td>
-                        <td>{{ signal.processed or "" }}</td>
-                        <td>
-                            <form method=post action=/resend>
-                                {% if signal.order_message is string %}
-                                <input type=hidden name=hash value="{{ hashlib.sha1(signal.order_message.encode('utf-8')).hexdigest() }}">
-                                <input type=submit class="btn btn-outline-secondary" value="Resend">
-                                {% else %}
-                                <input type=hidden name=hash value="{{ hashlib.sha1(signal.order_message).hexdigest() }}">
-                                <input type=submit class="btn btn-outline-secondary" value="Resend">
-                                {% endif %}
-                            </form>
-                        </td> 
+                        <td>{{ "%.2f"|format(signal.order_price|float) if (signal.order_price|float) > 0 else "" }}</td>
+                        <td><nobr>{{ "%.2f"|format((signal.processed - signal.timestamp).total_seconds()/60) if signal.processed else "" }}</nobr></td>
                     </tr>
                     {% endif %}
                     {% endfor %}
@@ -119,20 +107,20 @@
                         <th>Mkt Pos</th>
                         <th>Mkt Pos Size</th>
                         <th>Price at that Time</th>
-                        <th>Action</th>
+                        <th>Processed (sec)</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for signal in signals %}
                     {% if signal.bot != 'live' and signal.bot != 'human' %}
                     <tr>
-                        <td>{{ signal.timestamp }}</td>
-                        <td>{{ signal.bot or "" }}</td>
+                        <td><nobr>{{ signal.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</nobr></td>
+                        <td>{{ signal.bot }}</td>
                         <td>{{ signal.ticker }}</td>
                         <td>{{ signal.market_position or "" }}</td>
                         <td>{{ signal.market_position_size or "" }}</td>
-                        <td>{{ "%.2f"|format(signal.order_price|float) }}</td>
-                        <td></td> 
+                        <td>{{ "%.2f"|format(signal.order_price|float) if (signal.order_price|float) > 0 else "" }}</td>
+                        <td><nobr>{{ "%.2f"|format((signal.processed - signal.timestamp).total_seconds()/60) if signal.processed else "" }}</nobr></td>
                     </tr>
                     {% endif %}
                     {% endfor %}
