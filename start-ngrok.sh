@@ -13,7 +13,7 @@ while grep -s "ngrok-run = yes" config.ini >/dev/null ; do
 	if [ "$subd" = "" ] ; then
 		ngrok http 6008
 	else
-		ngrok http --subdomain=$subd 6008
+		ngrok http --url=$subd.ngrok.io 6008
 	fi
 	echo Restarting in 5s |tee -a $logfile
 	sleep 5

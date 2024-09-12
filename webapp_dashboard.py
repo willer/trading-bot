@@ -79,7 +79,7 @@ def process_order(direction, ticker):
     broker_message = {
         "ticker": ticker.upper(),
         "strategy": {
-            "bot": "live",  # Send 'live' to the broker
+            "bot": "human",  # Send 'live' to the broker
             "market_position": direction,
             "market_position_size": position_size,
         }
