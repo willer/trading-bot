@@ -316,7 +316,7 @@ async def check_messages():
 runcount = 1
 async def run_periodically(interval, periodic_function):
     global runcount
-    while runcount < 3600/2:
+    while runcount < 3600:
         await asyncio.gather(asyncio.sleep(interval), periodic_function())
         runcount = runcount + 1
     sys.exit()

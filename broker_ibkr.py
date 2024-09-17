@@ -74,7 +74,7 @@ class broker_ibkr(broker_root):
 
             elif symbol in ['NQ', 'ES', 'MNQ', 'MES']:
                 if not forhistory:
-                    stock = Future(symbol, '20240920', 'CME')
+                    stock = Future(symbol, '20241220', 'CME')
                 else:
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
                 stock.is_futures = 1
@@ -232,7 +232,7 @@ class broker_ibkr(broker_root):
         stock = self.get_stock(symbol)
 
         # keep a cache of tickers to avoid repeated calls to IB, but only for 5s
-        if symbol in ticker_cache and time.time() - ticker_cache[symbol]['time'] < 5:
+        if symbol in ticker_cache and time.time() - ticker_cache[symbol]['time'] < 10:
             ticker = ticker_cache[symbol]['ticker']
         else:
             [ticker] = self.conn.reqTickers(stock)
