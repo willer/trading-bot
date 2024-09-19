@@ -231,11 +231,13 @@ class broker_ibkr(broker_root):
         self.load_conn()
         stock = self.get_stock(symbol)
 
-        # keep a cache of tickers to avoid repeated calls to IB, but only for 5s
+        # keep a cache of tickers to avoid repeated calls to IB, but only for 10s
         if symbol in ticker_cache and time.time() - ticker_cache[symbol]['time'] < 10:
             ticker = ticker_cache[symbol]['ticker']
         else:
+            starttimer = time.time()
             [ticker] = self.conn.reqTickers(stock)
+            print(f"  get_price({symbol}) cache miss, took {time.time() - starttimer:.2f}s")
             ticker_cache[symbol] = {'ticker': ticker, 'time': time.time()}
 
         if math.isnan(ticker.last):

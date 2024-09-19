@@ -167,7 +167,7 @@ async def check_messages():
 
             ## extract data from TV payload received via webhook
             order_symbol_orig          = data_dict['ticker']                             # ticker for which TV order was sent
-            market_position_orig       = data_dict['strategy']['market_position']        # order direction: long, short, or flat
+            market_position_orig       = data_dict['strategy']['market_position']        # order direction: long, short, flat, halflong, or halfshort
             market_position_size_orig  = data_dict['strategy']['market_position_size']   # desired position after order per TV
             signal_id = data_dict['strategy'].get('id', None)
 
@@ -191,7 +191,8 @@ async def check_messages():
                 # also check for futures before even checking price, as Alpaca doesn't support them at all
                 order_symbol = order_symbol_orig
                 desired_position = market_position_size_orig
-                if market_position_orig == "short": desired_position = -market_position_size_orig
+                if "short" in market_position_orig: desired_position = -market_position_size_orig
+                if "half" in market_position_orig: desired_position = round(desired_position / 2)
                 print(f"** WORKING ON TRADE for account {account} symbol {order_symbol} to position {desired_position}")
 
                 # check for futures permissions (default is allow)

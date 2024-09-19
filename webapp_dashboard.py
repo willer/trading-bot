@@ -19,7 +19,7 @@ def dashboard():
 
 def is_dangerous_time():
     now = datetime.now().time()
-    return (dt_time(8, 25) <= now <= dt_time(10, 0)) or (dt_time(12, 0) <= now <= dt_time(16, 0))
+    return (dt_time(8, 20) <= now <= dt_time(9, 45)) or (dt_time(12, 0) <= now <= dt_time(16, 0))
 
 @app.route('/confirm_action', methods=['GET'])
 def confirm_action():
