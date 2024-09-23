@@ -1,9 +1,25 @@
+import configparser
 from twilio.rest import Client
 import traceback
 
 class broker_root:
     def __init__(self, bot, account):
-        pass
+        self.config = configparser.ConfigParser()
+        self.config.read('config.ini')
+        self.bot = bot
+        self.account = account
+        self.aconfig = self.get_account_config(account)
+
+    def get_account_config(self, account):
+        account_config = self.config[account]
+        if 'group' in account_config:
+            group = account_config['group']
+            group_config = self.config[group]
+            # Merge group config into account config, account config takes precedence
+            merged_config = {**group_config, **account_config}
+            print(f"merged_config({account}): {merged_config}")
+            return merged_config
+        return account_config
 
     def handle_ex(self, e):
         account_sid = self.config['DEFAULT'].get('twilio-account-sid', '')

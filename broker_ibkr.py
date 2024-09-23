@@ -23,7 +23,7 @@ class broker_ibkr(broker_root):
         self.config.read('config.ini')
         self.bot = bot
         self.account = account
-        self.aconfig = self.config[account]
+        self.aconfig = self.get_account_config(account)
         self.conn = None
 
     def load_conn(self):
@@ -431,3 +431,47 @@ class broker_ibkr(broker_root):
         self.get_net_liquidity()
         self.get_position_size('SOXL')
         self.get_position_size('SOXS')
+
+    async def set_bracket(self, symbol):
+        print(f"set_bracket({self.account},{symbol})")
+        self.load_conn()
+        stock = self.get_stock(symbol)
+
+        # Get the current price
+        price = self.get_price(symbol)
+
+        # Calculate stop loss and take profit prices
+        stop_loss_price = self.x_round(price * 0.99, stock.round_precision)
+        take_profit_price = self.x_round(price * 1.05, stock.round_precision)
+
+        # Create the main order
+        main_order = MarketOrder('BUY', 1)
+        main_order.outsideRth = True
+        main_order.account = self.account
+
+        # Create the stop loss order
+        stop_loss_order = StopOrder('SELL', 1, stop_loss_price)
+        stop_loss_order.parentId = main_order.orderId
+        stop_loss_order.outsideRth = True
+        stop_loss_order.account = self.account
+
+        # Create the take profit order
+        take_profit_order = LimitOrder('SELL', 1, take_profit_price)
+        take_profit_order.parentId = main_order.orderId
+        take_profit_order.outsideRth = True
+        take_profit_order.account = self.account
+
+        # Link orders as OCA (One-Cancels-All)
+        oca_group = f"OCA_{symbol}_{int(time.time())}"
+        main_order.ocaGroup = oca_group
+        stop_loss_order.ocaGroup = oca_group
+        take_profit_order.ocaGroup = oca_group
+
+        # Place the bracket order
+        print("  placing bracket order: ", main_order, stop_loss_order, take_profit_order)
+        trade = self.conn.placeOrder(stock, main_order)
+        self.conn.placeOrder(stock, stop_loss_order)
+        self.conn.placeOrder(stock, take_profit_order)
+        print("    trade: ", trade)
+
+        return trade  # Return the main order ID

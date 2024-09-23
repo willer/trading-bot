@@ -109,6 +109,17 @@ async def wait_for_trades(drivers_and_orders, signal_id, timeout=30):
     
     return False  # Timeout reached, some trades incomplete
 
+def get_account_config(account):
+    config.read('config.ini')
+    account_config = config[account]
+    if 'group' in account_config:
+        group = account_config['group']
+        group_config = config[group]
+        # Merge group config into account config, account config takes precedence
+        merged_config = {**group_config, **account_config}
+        return merged_config
+    return account_config
+
 async def check_messages():
 
     #print(f"{time.time()} - checking for tradingview webhook messages")
@@ -123,8 +134,7 @@ async def check_messages():
                 print("health check received")
                 drivers_checked = {}
                 for account in accounts:
-                    config.read('config.ini')
-                    aconfig = config[account]
+                    aconfig = get_account_config(account)
                     if aconfig['driver'] == 'ibkr':
                         driver = broker_ibkr(bot, account)
                     elif aconfig['driver'] == 'alpaca':
@@ -142,7 +152,7 @@ async def check_messages():
 
                 r.publish('health', 'ok')
             except Exception as e:
-                print(f"health check failed: {e}")
+                print(f"health check failed: {e}, {traceback.format_exc()}")
 
             return
 
@@ -167,6 +177,7 @@ async def check_messages():
 
             ## extract data from TV payload received via webhook
             order_symbol_orig          = data_dict['ticker']                             # ticker for which TV order was sent
+            order_symbol_lower         = order_symbol_orig.lower()                       # config variables coming from aconfig are lowercase
             market_position_orig       = data_dict['strategy']['market_position']        # order direction: long, short, flat, halflong, or halfshort
             market_position_size_orig  = data_dict['strategy']['market_position_size']   # desired position after order per TV
             signal_id = data_dict['strategy'].get('id', None)
@@ -178,7 +189,7 @@ async def check_messages():
 
                 print("")
 
-                aconfig = config[account]
+                aconfig = get_account_config(account)
                 driver: broker_root = None
                 if aconfig['driver'] == 'ibkr':
                     driver = broker_ibkr(bot, account)
@@ -221,9 +232,9 @@ async def check_messages():
 
                 # check for account and security specific percentage of net liquidity in config
                 # (if it's not a goflat order)
-                if not order_stock.is_futures and desired_position != 0 and (f"{order_symbol}-pct" in aconfig or f"default-pct" in aconfig):
-                    if f"{order_symbol}-pct" in aconfig:
-                        percent = float(aconfig[f"{order_symbol}-pct"])
+                if not order_stock.is_futures and desired_position != 0 and (f"{order_symbol_lower}-pct" in aconfig or f"default-pct" in aconfig):
+                    if f"{order_symbol_lower}-pct" in aconfig:
+                        percent = float(aconfig[f"{order_symbol_lower}-pct"])
                     else:
                         percent = float(aconfig["default-pct"])
                     # first, we find the value of the desired position in dollars, and set up some tiers
@@ -248,9 +259,9 @@ async def check_messages():
                     print(f"not using account specific net liquidity: is_futures={order_stock.is_futures} desired_position={desired_position} pctconfig={f'{order_symbol} pct' in aconfig}")
 
                 # check for security conversion (generally futures to ETF); format is "mult x ETF"
-                if order_symbol_orig in aconfig:
-                    print("switching from ", order_symbol_orig, " to ", aconfig[order_symbol_orig])
-                    [switchmult, x, order_symbol] = aconfig[order_symbol_orig].split()
+                if order_symbol_lower in aconfig:
+                    print("switching from ", order_symbol_orig, " to ", aconfig[order_symbol_lower])
+                    [switchmult, x, order_symbol] = aconfig[order_symbol_lower].split()
                     switchmult = float(switchmult)
                     desired_position = round(desired_position * switchmult)
                     order_stock = driver.get_stock(order_symbol)
@@ -265,7 +276,7 @@ async def check_messages():
                 if desired_position < 0 and aconfig.get('use-inverse-etf', 'no') == 'yes':
                     long_price = driver.get_price(order_symbol)
                     long_symbol = order_symbol
-                    short_symbol = config['inverse-etfs'][order_symbol]
+                    short_symbol = config['inverse-etfs'][order_symbol_lower]
 
                     # now continue with the short ETF
                     order_symbol = short_symbol
@@ -290,11 +301,15 @@ async def check_messages():
                 current_position = driver.get_position_size(order_symbol)
 
                 # now let's go ahead and place the order to reach the desired position
-                if desired_position != current_position:
-                    print(f"sending order to reach desired position of {desired_position} shares")
-                    trades.append((driver, order_symbol, desired_position))
+                if market_position_orig == "bracket":
+                    print(f"** PLACING BRACKET ORDER for account {account} symbol {order_symbol}")
+                    await driver.set_bracket(order_symbol)
                 else:
-                    print('desired quantity is the same as the current quantity.  No order placed.')
+                    if desired_position != current_position:
+                        print(f"sending order to reach desired position of {desired_position} shares")
+                        trades.append((driver, order_symbol, desired_position))
+                    else:
+                        print('desired quantity is the same as the current quantity.  No order placed.')
 
             if trades:
                 print("executing trades")

@@ -26,7 +26,7 @@ class broker_alpaca(broker_root):
         self.config.read('config.ini')
         self.bot = bot
         self.account = account
-        self.aconfig = self.config[account]
+        self.aconfig = self.get_account_config(account)
         self.conn = None
         self.dataconn = None
 
