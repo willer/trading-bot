@@ -4,6 +4,7 @@ from flask import redirect, render_template, request, session, url_for
 from webapp_core import app, get_db, is_logged_in, USER_CREDENTIALS, publish_signal, r, p
 import webapp_reports
 import webapp_dashboard
+import webapp_stocks  # Add this line
 
 # New login route
 @app.route('/login', methods=['GET', 'POST'])

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Stocks{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="mb-4">Stock Charts</h1>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2>QQQ and SOXL intraday</h2>
+            <div class="tradingview-widget-container">
+                <div id="tradingview_qqq_intraday"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="tradingview-widget-container">
+                <div id="tradingview_soxl"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2>QQQ and SPY daily</h2>
+            <div class="tradingview-widget-container">
+                <div id="tradingview_qqq_daily"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="tradingview-widget-container">
+                <div id="tradingview_spy"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+<script type="text/javascript">
+    function createWidget(container, symbol, interval, showExtendedHours, additionalStudies) {
+        new TradingView.widget({
+            "width": "100%",
+            "height": 600,
+            "symbol": symbol,
+            "interval": interval,
+            "timezone": "America/New_York",
+            "theme": "light",
+            "style": "1",
+            "locale": "en",
+            "toolbar_bg": "#f1f3f6",
+            "enable_publishing": false,
+            "hide_top_toolbar": false,
+            "hide_legend": false,
+            "save_image": false,
+            "container_id": container,
+            "extended_hours": showExtendedHours,
+            "studies": [
+                "RSI@tv-basicstudies",
+                ...additionalStudies
+            ],
+            "drawings_access": { type: "all", tools: [ { name: "Regression Trend" } ] }
+        });
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        createWidget("tradingview_qqq_intraday", "NASDAQ:QQQ", "5", true, ["VWAP@tv-basicstudies"]);
+        createWidget("tradingview_soxl", "AMEX:SOXL", "5", true, ["VWAP@tv-basicstudies"]);
+        createWidget("tradingview_qqq_daily", "NASDAQ:QQQ", "D", false, ["CHOP@tv-basicstudies"]);
+        createWidget("tradingview_spy", "AMEX:SPY", "D", false, ["CHOP@tv-basicstudies"]);
+    });
+</script>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .container-fluid {
+        padding-left: 30px;
+        padding-right: 30px;
+    }
+    .tradingview-widget-container {
+        height: 600px;
+        margin-bottom: 20px;
+    }
+</style>
+{% endblock %}

@@ -17,7 +17,7 @@ class broker_root:
             group_config = self.config[group]
             # Merge group config into account config, account config takes precedence
             merged_config = {**group_config, **account_config}
-            print(f"merged_config({account}): {merged_config}")
+            #print(f"merged_config({account}): {merged_config}")
             return merged_config
         return account_config
 

@@ -231,8 +231,9 @@ class broker_ibkr(broker_root):
         self.load_conn()
         stock = self.get_stock(symbol)
 
-        # keep a cache of tickers to avoid repeated calls to IB, but only for 10s
-        if symbol in ticker_cache and time.time() - ticker_cache[symbol]['time'] < 10:
+        # keep a cache of tickers to avoid repeated calls to IB, but only for 15s
+        # (IBKR is giving us 11s delays for some reason)
+        if symbol in ticker_cache and time.time() - ticker_cache[symbol]['time'] < 15:
             ticker = ticker_cache[symbol]['ticker']
         else:
             starttimer = time.time()
