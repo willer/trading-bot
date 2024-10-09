@@ -45,9 +45,9 @@ def resend():
     if signal:
         data_dict = json.loads(signal["order_message"])
         publish_signal(signal)
-        return "<html><body>Found it!<br><br><a href=/>Back to Home</a></body></html>"
+        return render_template('action_response.html', message="Signal resent successfully!", redirect_url=url_for('dashboard'))
     else:
-        return "<html><body>Didn't find it!<br><br><a href=/>Back to Home</a></body></html>"
+        return render_template('action_response.html', message="Signal not found!", redirect_url=url_for('dashboard'))
 
 # POST /order
 # manual order submission
@@ -64,7 +64,7 @@ def order():
     tickers = ticker.split(';')
     for ticker in tickers:
         process_order(direction, ticker)
-    return "<html><body>Orders submitted and logged!<br><a href=/>Back to Home</a></body></html>"
+    return render_template('action_response.html', message="Orders submitted and logged!", redirect_url=url_for('dashboard'))
 
 def process_order(direction, ticker):
     position_size = 1000000
@@ -101,18 +101,18 @@ def execute_action():
         tickers = ticker.split(';')
         for ticker in tickers:
             process_order(direction, ticker)
-        return "<html><body>Orders submitted and logged!<br><a href=/>Back to Home</a></body></html>"
+        return render_template('action_response.html', message="Orders submitted and logged!", redirect_url=url_for('dashboard'))
     else:
-        return f"<html><body>Unknown action '{action}'<br><br><a href=/>Back to Home</a></body></html>"
+        return render_template('action_response.html', message=f"Unknown action '{action}'", redirect_url=url_for('dashboard'))
 
 def resend_action(id):
     signal = get_signal(id)
     if signal:
         data_dict = json.loads(signal["order_message"])
         publish_signal(data_dict)
-        return "<html><body>Found it!<br><br><a href=/>Back to Home</a></body></html>"
+        return render_template('action_response.html', message="Signal resent successfully!", redirect_url=url_for('dashboard'))
     else:
-        return "<html><body>Didn't find it!<br><br><a href=/>Back to Home</a></body></html>"
+        return render_template('action_response.html', message="Signal not found!", redirect_url=url_for('dashboard'))
 
 # Modify these routes to require login
 @app.post("/stop-backend")
