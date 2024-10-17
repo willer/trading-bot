@@ -150,7 +150,7 @@ def show_logs_ibkr():
     else:
         tail = int(tail)
 
-    fname = "start-broker.sh.log"
+    fname = "logs/start-broker.sh.log"
     if os.path.exists(fname):
         with open(fname) as f:
             # read the last n lines
