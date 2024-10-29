@@ -5,6 +5,8 @@ from webapp_core import app, get_db, is_logged_in, USER_CREDENTIALS, publish_sig
 import webapp_reports
 import webapp_dashboard
 import webapp_stocks  # Add this line
+import threading
+import time
 
 # New login route
 @app.route('/login', methods=['GET', 'POST'])
@@ -65,9 +67,18 @@ def health():
     else:
         return {"code": "failure", "message-type": "timeout", "message": "no message received"}, 500
 
-########################################################################################
-# MAIN
-########################################################################################
+def retry_checker():
+    while True:
+        try:
+            process_signal_retries()
+        except Exception as e:
+            app.logger.error(f"Error processing retries: {e}")
+        time.sleep(5)  # Check every 5 seconds
+
+# Start the retry checker thread when the app starts
 if __name__ == '__main__':
+    retry_thread = threading.Thread(target=retry_checker, daemon=True)
+    retry_thread.start()
+    
     app.config['TEMPLATES_AUTO_RELOAD'] = True
     app.run(debug=True)

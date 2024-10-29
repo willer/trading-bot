@@ -81,6 +81,40 @@ def create_tables():
             ADD COLUMN processed TIMESTAMP DEFAULT NULL
         """)
         print("Added 'processed' column to signals table.")
+
+    # Check if the 'skipped' column exists, and add it if it doesn't
+    cur.execute("""
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name='signals' AND column_name='skipped'
+    """)
+    if cur.fetchone() is None:
+        cur.execute("""
+            ALTER TABLE signals
+            ADD COLUMN skipped TEXT DEFAULT NULL
+        """)
+        print("Added 'skipped' column to signals table.")
+
+    # Create the signal_retries table if it doesn't exist
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS signal_retries (
+            id SERIAL PRIMARY KEY,
+            original_signal_id INTEGER REFERENCES signals(id) ON DELETE CASCADE,
+            retry_time TIMESTAMP NOT NULL,
+            signal_data JSONB NOT NULL,
+            retries_remaining INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    print("Created signal_retries table if it didn't exist.")
+
+    # Create index on retry_time for better performance
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_signal_retries_retry_time 
+        ON signal_retries(retry_time)
+        WHERE retries_remaining > 0
+    """)
+    print("Created index on signal_retries retry_time if it didn't exist.")
     
     conn.commit()
     cur.close()

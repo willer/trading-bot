@@ -31,30 +31,52 @@ class broker_ibkr(broker_root):
         ibcachekey = f"{self.aconfig['host']}:{self.aconfig['port']}"
         if ibcachekey in ibconn_cache:
             self.conn = ibconn_cache[ibcachekey]['conn']
+            # Test if connection is still alive
+            try:
+                self.conn.isConnected()
+            except:
+                self.conn = None
+                del ibconn_cache[ibcachekey]
 
         if self.conn is None:
             self.conn = IB()
-            try:
-                print(f"IB: Trying to connect...")
-                self.conn.connect(self.aconfig['host'], self.aconfig['port'], clientId=1)
-            except Exception as e:
+            max_retries = 3
+            retry_delay = 2  # seconds
+            
+            for attempt in range(max_retries):
                 try:
-                    self.conn.connect(self.aconfig['host'], self.aconfig['port'], clientId=3)
+                    client_id = 1 + attempt
+                    print(f"IB: Attempting to connect (attempt {attempt + 1}/{max_retries}, client ID: {client_id})...")
+                    self.conn.connect(
+                        self.aconfig['host'], 
+                        int(self.aconfig['port']), 
+                        clientId=client_id,
+                        timeout=20  # Increase timeout
+                    )
+                    print("IB: Connected successfully")
+                    # Cache the successful connection
+                    ibconn_cache[ibcachekey] = {'conn': self.conn, 'time': time.time()}
+                    return
                 except Exception as e:
-                    try:
-                        self.conn.connect(self.aconfig['host'], self.aconfig['port'], clientId=4)
-                    except Exception as e:
-                        try:
-                            self.conn.connect(self.aconfig['host'], self.aconfig['port'], clientId=5)
-                        except Exception as e:
-                            self.handle_ex(e)
-                            raise
+                    print(f"Connection attempt {attempt + 1} failed: {str(e)}")
+                    if attempt < max_retries - 1:
+                        print(f"Waiting {retry_delay} seconds before retry...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                    else:
+                        self.handle_ex(f"Failed to connect after {max_retries} attempts: {str(e)}")
+                        raise
 
-            # cache the connection
-            ibconn_cache[ibcachekey] = {'conn': self.conn, 'time': time.time()}
-            print("IB: Connected")
+    def check_connection(self):
+        """Check if the connection is alive and reconnect if needed"""
+        if self.conn is None or not self.conn.isConnected():
+            print("IB: Connection lost or not established, attempting to reconnect...")
+            self.load_conn()
+        return self.conn.isConnected()
 
     def get_stock(self, symbol, forhistory=False):
+        if not self.check_connection():
+            raise Exception("Unable to establish connection to Interactive Brokers")
         self.load_conn()
         # keep a cache of stocks to avoid repeated calls to IB
         if symbol in stock_cache:
@@ -228,6 +250,8 @@ class broker_ibkr(broker_root):
         return stock
 
     def get_price(self, symbol):
+        if not self.check_connection():
+            raise Exception("Unable to establish connection to Interactive Brokers")
         self.load_conn()
         stock = self.get_stock(symbol)
 

@@ -4,6 +4,9 @@ from flask import Flask, g, json, session
 from flask_sqlalchemy import SQLAlchemy
 import redis
 from psycopg2 import pool
+import datetime
+from datetime import timedelta
+import asyncio
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///trade.db'
@@ -88,29 +91,134 @@ def update_signal(id, data_dict):
     cursor.execute(sql, tuple(data_dict.values()) + (id,))
     db.commit()
 
-def publish_signal(data_dict):
+def should_skip_flat_signal(data_dict):
+    """
+    Check if this flat signal should be skipped due to recent directional signals
+    Returns (should_skip, reason)
+    """
+    if data_dict['strategy'].get('market_position', '') != 'flat':
+        return False, None
+        
+    # Look for recent non-flat signals for this symbol and bot
     db = get_db()
     cursor = db.cursor()
-    # run the query and get the id
     cursor.execute("""
-        INSERT INTO signals (ticker, bot, order_action, order_contracts, market_position, market_position_size, order_price, order_message) 
+        SELECT * FROM signals 
+        WHERE ticker = %s 
+        AND bot = %s 
+        AND market_position != 'flat'
+        AND timestamp > NOW() - INTERVAL '2 minutes'
+        ORDER BY timestamp DESC
+        LIMIT 1
+    """, (data_dict['ticker'], data_dict['strategy'].get('bot', '')))
+    
+    recent_signal = cursor.fetchone()
+    if recent_signal:
+        return True, f"Skipping flat signal - found recent {recent_signal[3]} signal from {recent_signal[1]}"
+    
+    return False, None
+
+def schedule_signal_retry(data_dict, delay_seconds=30):
+    """Schedule a signal to be re-sent after a delay"""
+    retry_time = datetime.datetime.now() + timedelta(seconds=delay_seconds)
+    
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("""
+        INSERT INTO signal_retries 
+        (original_signal_id, retry_time, signal_data, retries_remaining)
+        VALUES (%s, %s, %s, %s)
+    """, (data_dict['strategy'].get('id'), retry_time, json.dumps(data_dict), 1))
+    db.commit()
+
+def process_signal_retries():
+    """Process any signal retries that are due"""
+    db = get_db()
+    cursor = db.cursor()
+    
+    # Get signals due for retry
+    cursor.execute("""
+        SELECT id, signal_data, retries_remaining 
+        FROM signal_retries 
+        WHERE retry_time <= NOW() 
+        AND retries_remaining > 0
+    """)
+    
+    retries = cursor.fetchall()
+    for retry in retries:
+        retry_id, signal_data, retries_left = retry
+        
+        # Re-publish the signal
+        signal_dict = json.loads(signal_data)
+        signal_dict['is_retry'] = True
+        r.publish('tradingview', json.dumps(signal_dict))
+        
+        # Update retry count
+        cursor.execute("""
+            UPDATE signal_retries 
+            SET retries_remaining = retries_remaining - 1
+            WHERE id = %s
+        """, (retry_id,))
+        
+    db.commit()
+
+def publish_signal(data_dict):
+    # Check if we should skip this flat signal
+    should_skip, skip_reason = should_skip_flat_signal(data_dict)
+    if should_skip:
+        # Still record the signal but mark it as skipped
+        data_dict['strategy']['skipped'] = skip_reason
+        
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("""
+            INSERT INTO signals 
+            (ticker, bot, order_action, order_contracts, market_position, 
+             market_position_size, order_price, order_message, skipped) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (data_dict['ticker'],
+              data_dict['strategy'].get('bot', ''),
+              data_dict['strategy'].get('order_action', ''),
+              data_dict['strategy'].get('order_contracts', ''),
+              data_dict['strategy'].get('market_position', ''),
+              data_dict['strategy'].get('market_position_size', ''),
+              data_dict['strategy'].get('order_price', ''),
+              data_dict['strategy'].get('order_message', ''),
+              skip_reason))
+        db.commit()
+        return
+    
+    # Normal signal processing
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("""
+        INSERT INTO signals 
+        (ticker, bot, order_action, order_contracts, market_position, 
+         market_position_size, order_price, order_message) 
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
-    """, (data_dict['ticker'], 
-            data_dict['strategy'].get('bot', ''),
-            data_dict['strategy'].get('order_action', ''), 
-            data_dict['strategy'].get('order_contracts', ''),
-            data_dict['strategy'].get('market_position', ''),
-            data_dict['strategy'].get('market_position_size', ''),
-            data_dict['strategy'].get('order_price', ''),
-            data_dict['strategy'].get('order_message', '')))
+    """, (data_dict['ticker'],
+          data_dict['strategy'].get('bot', ''),
+          data_dict['strategy'].get('order_action', ''),
+          data_dict['strategy'].get('order_contracts', ''),
+          data_dict['strategy'].get('market_position', ''),
+          data_dict['strategy'].get('market_position_size', ''),
+          data_dict['strategy'].get('order_price', ''),
+          data_dict['strategy'].get('order_message', '')))
     db.commit()
     id = cursor.fetchone()[0]
-
-    # serialize the data_dict to a string
+    
+    # Add the signal ID to the data
     data_dict['strategy']['id'] = id
+    
+    # Publish the signal
     signal_str = json.dumps(data_dict)
     r.publish('tradingview', signal_str)
+    
+    # Schedule a retry
+    if not data_dict.get('is_retry'):  # Don't schedule retries of retries
+        schedule_signal_retry(data_dict)
 
 
 
