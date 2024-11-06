@@ -25,6 +25,17 @@ class broker_ibkr(broker_root):
         self.account = account
         self.aconfig = self.get_account_config(account)
         self.conn = None
+        
+        # Initialize connection at startup
+        try:
+            print(f"IB: Initializing connection for account {account}...")
+            self.load_conn()
+            if self.check_connection():
+                print(f"IB: Successfully initialized connection for account {account}")
+            else:
+                print(f"IB: Failed to establish initial connection for account {account}")
+        except Exception as e:
+            print(f"IB: Error during initial connection for account {account}: {str(e)}")
 
     def load_conn(self):
         # pick up a cached IB connection if it exists
@@ -39,19 +50,20 @@ class broker_ibkr(broker_root):
                 del ibconn_cache[ibcachekey]
 
         if self.conn is None:
-            self.conn = IB()
             max_retries = 3
             retry_delay = 2  # seconds
             
             for attempt in range(max_retries):
                 try:
+                    # Create new IB instance for each attempt
+                    self.conn = IB()
                     client_id = 1 + attempt
                     print(f"IB: Attempting to connect (attempt {attempt + 1}/{max_retries}, client ID: {client_id})...")
                     self.conn.connect(
                         self.aconfig['host'], 
                         int(self.aconfig['port']), 
                         clientId=client_id,
-                        timeout=20  # Increase timeout
+                        timeout=20
                     )
                     print("IB: Connected successfully")
                     # Cache the successful connection
@@ -59,6 +71,14 @@ class broker_ibkr(broker_root):
                     return
                 except Exception as e:
                     print(f"Connection attempt {attempt + 1} failed: {str(e)}")
+                    # Disconnect and cleanup failed connection
+                    try:
+                        if self.conn:
+                            self.conn.disconnect()
+                            self.conn = None
+                    except:
+                        pass
+                    
                     if attempt < max_retries - 1:
                         print(f"Waiting {retry_delay} seconds before retry...")
                         time.sleep(retry_delay)

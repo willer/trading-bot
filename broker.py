@@ -120,6 +120,30 @@ def get_account_config(account):
         return merged_config
     return account_config
 
+# After setting up accounts list but before the message loop...
+
+print("Initializing broker connections...")
+drivers = {}
+for account in accounts:
+    try:
+        aconfig = get_account_config(account)
+        print(f"\nInitializing connection for account {account} using {aconfig['driver']} driver...")
+        
+        if aconfig['driver'] == 'ibkr':
+            driver = broker_ibkr(bot, account)
+        elif aconfig['driver'] == 'alpaca':
+            driver = broker_alpaca(bot, account)
+        else:
+            raise Exception(f"Unknown driver: {aconfig['driver']}")
+            
+        # Cache the driver instance
+        drivers[account] = driver
+        
+    except Exception as e:
+        error_msg = f"Failed to initialize {account}: {str(e)}"
+        print(error_msg)
+        handle_ex(error_msg)
+
 async def check_messages():
 
     #print(f"{time.time()} - checking for tradingview webhook messages")
@@ -134,13 +158,8 @@ async def check_messages():
                 print("health check received")
                 drivers_checked = {}
                 for account in accounts:
+                    driver = drivers[account]
                     aconfig = get_account_config(account)
-                    if aconfig['driver'] == 'ibkr':
-                        driver = broker_ibkr(bot, account)
-                    elif aconfig['driver'] == 'alpaca':
-                        driver = broker_alpaca(bot, account)
-                    else:
-                        raise Exception("Unknown driver: " + aconfig['driver'])
 
                     if aconfig['driver'] not in drivers_checked:
                         drivers_checked[aconfig['driver']] = True
@@ -190,13 +209,7 @@ async def check_messages():
                 print("")
 
                 aconfig = get_account_config(account)
-                driver: broker_root = None
-                if aconfig['driver'] == 'ibkr':
-                    driver = broker_ibkr(bot, account)
-                elif aconfig['driver'] == 'alpaca':
-                    driver = broker_alpaca(bot, account)
-                else:
-                    raise Exception("Unknown driver: " + aconfig['driver'])
+                driver = drivers[account]
 
                 # set up variables for this account, normalizing market position to be positive or negative based on long or short
                 # also check for futures before even checking price, as Alpaca doesn't support them at all
@@ -204,7 +217,7 @@ async def check_messages():
                 desired_position = market_position_size_orig
                 if "short" in market_position_orig: desired_position = -market_position_size_orig
                 if "half" in market_position_orig: desired_position = round(desired_position / 2)
-                print(f"** WORKING ON TRADE for account {account} symbol {order_symbol} to position {desired_position}")
+                print(f"** {datetime.datetime.now()} WORKING ON TRADE for account {account} symbol {order_symbol} to position {desired_position}")
 
                 # check for futures permissions (default is allow)
                 order_stock = driver.get_stock(order_symbol)

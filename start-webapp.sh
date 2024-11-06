@@ -20,7 +20,7 @@ rotate_logs() {
 # Ensure logs directory exists
 mkdir -p logs
 
-# start webapp/webhook-receiver (move to port 6001 to get away from Mac airplay issues)
+# start webapp/webhook-receiver
 export FLASK_APP=webapp
 export FLASK_ENV=development
 export FLASK_DEBUG=1

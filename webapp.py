@@ -1,12 +1,25 @@
 import hashlib
 import traceback
 from flask import redirect, render_template, request, session, url_for
-from webapp_core import app, get_db, is_logged_in, USER_CREDENTIALS, publish_signal, r, p
+from webapp_core import app, get_db, is_logged_in, USER_CREDENTIALS, publish_signal, r, p, process_signal_retries
+from flask_apscheduler import APScheduler
 import webapp_reports
 import webapp_dashboard
-import webapp_stocks  # Add this line
-import threading
-import time
+import webapp_stocks
+
+# Initialize scheduler
+scheduler = APScheduler()
+scheduler.init_app(app)
+scheduler.start()
+
+# Add scheduler job
+@scheduler.task('interval', id='process_retries', seconds=5, misfire_grace_time=None)
+def scheduled_retry_check():
+    with app.app_context():
+        try:
+            process_signal_retries()
+        except Exception as e:
+            app.logger.error(f"Error processing retries: {e}, traceback: {traceback.format_exc()}")
 
 # New login route
 @app.route('/login', methods=['GET', 'POST'])
@@ -67,18 +80,6 @@ def health():
     else:
         return {"code": "failure", "message-type": "timeout", "message": "no message received"}, 500
 
-def retry_checker():
-    while True:
-        try:
-            process_signal_retries()
-        except Exception as e:
-            app.logger.error(f"Error processing retries: {e}")
-        time.sleep(5)  # Check every 5 seconds
-
-# Start the retry checker thread when the app starts
 if __name__ == '__main__':
-    retry_thread = threading.Thread(target=retry_checker, daemon=True)
-    retry_thread.start()
-    
     app.config['TEMPLATES_AUTO_RELOAD'] = True
     app.run(debug=True)
