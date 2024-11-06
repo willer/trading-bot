@@ -240,6 +240,14 @@ async def check_messages():
                             await driver.set_position_size(short_symbol, 0)
                     if desired_position <= 0:
                         await driver.set_position_size(order_symbol, 0)
+                    
+                    # If we're going flat (desired_position = 0), we've already closed everything
+                    # so we can return early
+                    if desired_position == 0:
+                        if signal_id:
+                            update_signal(signal_id, {'processed': datetime.datetime.now().isoformat()})
+                        print("Position closed via inverse ETF logic")
+                        return
 
                 current_position = driver.get_position_size(order_symbol)
 
