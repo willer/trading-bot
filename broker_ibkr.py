@@ -370,8 +370,8 @@ class broker_ibkr(broker_root):
 
             else:
                 price = self.get_price(symbol)
-                high_limit_price = self.x_round(price * 1.005, stock.round_precision)
-                low_limit_price  = self.x_round(price * 0.995, stock.round_precision)
+                high_limit_price = self.x_round(price * 1.008, stock.round_precision)
+                low_limit_price  = self.x_round(price * 0.992, stock.round_precision)
 
                 if position_variation > 0:
                     order = LimitOrder('BUY', position_variation, high_limit_price)
