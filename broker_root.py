@@ -64,3 +64,17 @@ class broker_root:
 
     def health_check(self):
         pass
+
+    def get_margin_requirement(self, symbol):
+        """Get margin requirement per contract/share for an instrument"""
+        # Default implementation - override in specific brokers
+        if symbol in ['NQ1!', 'MNQ1!']:
+            return 17600  # NQ margin requirement
+        elif symbol in ['ES1!', 'MES1!']:
+            return 15400  # ES margin requirement
+        elif symbol in ['TQQQ', 'SQQQ']:
+            return 1  # Cash instruments use price as margin
+        elif symbol in ['SOXL', 'SOXS']:
+            return 1
+        else:
+            return 1  # Default to cash instrument

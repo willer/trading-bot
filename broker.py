@@ -197,26 +197,51 @@ async def check_messages():
             ## extract data from TV payload received via webhook
             order_symbol_orig          = data_dict['ticker']                             # ticker for which TV order was sent
             order_symbol_lower         = order_symbol_orig.lower()                       # config variables coming from aconfig are lowercase
-            market_position_orig       = data_dict['strategy']['market_position']        # order direction: long, short, flat, halflong, or halfshort
-            market_position_size_orig  = data_dict['strategy']['market_position_size']   # desired position after order per TV
+            # Handle both old and new signal formats
+            market_position_orig       = data_dict['strategy'].get('market_position', '')        # order direction: long, short, flat, halflong, or halfshort
+            market_position_size_orig  = data_dict['strategy'].get('market_position_size', 0)   # desired position after order per TV
             signal_id = data_dict['strategy'].get('id', None)
 
 
             trades = []
             for account in accounts:
                 ## PLACING THE ORDER
-
                 print("")
 
                 aconfig = get_account_config(account)
                 driver = drivers[account]
+                order_symbol = order_symbol_orig  # Move this up before the signal type check
 
-                # set up variables for this account, normalizing market position to be positive or negative based on long or short
-                # also check for futures before even checking price, as Alpaca doesn't support them at all
-                order_symbol = order_symbol_orig
-                desired_position = market_position_size_orig
-                if "short" in market_position_orig: desired_position = -market_position_size_orig
-                if "half" in market_position_orig: desired_position = round(desired_position / 2)
+                if data_dict['strategy'].get('signal_type') == 'set_pct':
+                    # Handle percentage-based position sizing from UI
+                    position_pct = data_dict['strategy']['position_pct']
+                    
+                    # Get base percentage for this instrument from config
+                    base_pct = float(aconfig.get(f"{order_symbol_lower}-pct", aconfig.get("default-pct", "0")))
+                    
+                    # Calculate actual percentage to use
+                    actual_pct = (base_pct * position_pct) / 100
+                    
+                    # Calculate position size based on account value and instrument margin requirements
+                    net_liquidity = driver.get_net_liquidity()
+                    margin_req = driver.get_margin_requirement(order_symbol)
+                    
+                    if margin_req == 1:  # Cash instrument
+                        order_price = driver.get_price(order_symbol)
+                        margin_req = order_price
+                        
+                    desired_position = round((net_liquidity * actual_pct / 100) / margin_req)
+                    print(f"Calculated position: {desired_position} contracts/shares " +
+                          f"({actual_pct}% of ${net_liquidity} at ${margin_req}/unit)")
+                    
+                else:
+                    # Handle existing TradingView signals
+                    desired_position = market_position_size_orig
+                    if "short" in market_position_orig:
+                        desired_position = -market_position_size_orig
+                    if "half" in market_position_orig:
+                        desired_position = round(desired_position / 2)
+
                 print(f"** {datetime.datetime.now()} WORKING ON TRADE for account {account} symbol {order_symbol} to position {desired_position}")
 
                 # check for futures permissions (default is allow)
@@ -268,9 +293,9 @@ async def check_messages():
 
                     # now we find the net liquidity in dollars
                     net_liquidity = driver.get_net_liquidity()
-                    # and then we find the desired position in shares
-                    print(f"new_desired_position = round({net_liquidity} * ({percent}/100) / {order_price})")
-                    new_desired_position = abs(round(net_liquidity * (percent/100) / order_price))
+                    # and then we find the desired position in shares, scaled by the position size (1.0 or 0.5)
+                    print(f"new_desired_position = round({net_liquidity} * ({percent}/100) / {order_price} * {abs(desired_position)})")
+                    new_desired_position = abs(round(net_liquidity * (percent/100) / order_price * abs(desired_position)))
                     if desired_position < 0: new_desired_position = -new_desired_position
                     print(f"using account specific net liquidity {percent}% for {order_symbol}: {desired_position} -> {new_desired_position}")
                     desired_position = new_desired_position

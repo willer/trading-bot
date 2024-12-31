@@ -67,21 +67,33 @@ def order():
     return render_template('action_response.html', message="Orders submitted and logged!", redirect_url=url_for('dashboard'))
 
 def process_order(direction, ticker):
-    position_size = 1000000
+    # Convert UI commands to percentage-based positions
     if direction == "flat":
-        position_size = 0
-    # special case for futures, for now
-    if direction != "flat":
-        if ticker in ["NQ1!", "ES1!", "GC1!"]:
-            position_size = 1
+        position_pct = 0
+        market_position = "flat"
+    elif direction == "long":
+        position_pct = 100
+        market_position = "long"
+    elif direction == "short":
+        position_pct = -100
+        market_position = "short"
+    elif direction == "halflong":
+        position_pct = 50
+        market_position = "long"
+    elif direction == "halfshort":
+        position_pct = -50
+        market_position = "short"
+    else:
+        raise ValueError(f"Unknown direction: {direction}")
 
     # Message to send to the broker
     broker_message = {
         "ticker": ticker.upper(),
         "strategy": {
-            "bot": "human",  # Send 'live' to the broker
-            "market_position": direction,
-            "market_position_size": position_size,
+            "bot": "human",
+            "signal_type": "set_pct",  # New field to differentiate UI vs TV signals
+            "position_pct": position_pct,
+            "market_position": market_position
         }
     }
     publish_signal(broker_message)
