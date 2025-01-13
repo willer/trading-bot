@@ -40,8 +40,9 @@
                         <div class="btn-group-vertical" id="tickerButtons">
                             <button type="button" data-ticker="NQ1!" class="btn btn-outline-primary btn-sm">NQ</button>
                             <button type="button" data-ticker="TQQQ" class="btn btn-outline-primary btn-sm">TQQQ</button>
-                            <button type="button" data-ticker="TQQQ;NQ1!" class="btn btn-outline-primary btn-sm">TQQQ+NQ</button>
                             <button type="button" data-ticker="SOXL" class="btn btn-outline-primary btn-sm">SOXL</button>
+                            <button type="button" data-ticker="TQQQ;NQ1!" class="btn btn-outline-primary btn-sm">TQQQ+NQ</button>
+                            <button type="button" data-ticker="TQQQ;SOXL" class="btn btn-outline-primary btn-sm">TQQQ+SOXL</button>
                             <button type="button" data-ticker="TQQQ;NQ1!;SOXL" class="btn btn-outline-primary btn-sm">ALL</button>
                         </div>
                     </div>
@@ -76,6 +77,7 @@
                         <th>Mkt Pos Size</th>
                         <th>Price at that Time</th>
                         <th>Processed (sec)</th>
+                        <th>Info</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -89,6 +91,15 @@
                         <td>{{ signal.market_position_size or "" }}</td>
                         <td>{{ "%.2f"|format(signal.order_price|float) if (signal.order_price|float) > 0 else "" }}</td>
                         <td><nobr>{{ "%.2f"|format((signal.processed - signal.timestamp).total_seconds()/60) if signal.processed else "" }}</nobr></td>
+                        <td>
+                            {% if signal.order_message %}
+                            <i class="fas fa-info-circle text-primary signal-info" 
+                               data-bs-toggle="modal" 
+                               data-bs-target="#jsonModal" 
+                               onclick='showJson({{ signal.order_message|safe }})' 
+                               role="button"></i>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endif %}
                     {% endfor %}
@@ -110,6 +121,7 @@
                         <th>Mkt Pos Size</th>
                         <th>Price at that Time</th>
                         <th>Processed (sec)</th>
+                        <th>Info</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -123,11 +135,35 @@
                         <td>{{ signal.market_position_size or "" }}</td>
                         <td>{{ "%.2f"|format(signal.order_price|float) if (signal.order_price|float) > 0 else "" }}</td>
                         <td><nobr>{{ "%.2f"|format((signal.processed - signal.timestamp).total_seconds()/60) if signal.processed else "" }}</nobr></td>
+                        <td>
+                            {% if signal.order_message %}
+                            <i class="fas fa-info-circle text-primary signal-info" 
+                               data-bs-toggle="modal" 
+                               data-bs-target="#jsonModal" 
+                               onclick='showJson({{ signal.order_message|safe }})' 
+                               role="button"></i>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endif %}
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- JSON Modal -->
+<div class="modal fade" id="jsonModal" tabindex="-1" aria-labelledby="jsonModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="jsonModalLabel">Signal Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <pre id="jsonContent" class="json-content"></pre>
+            </div>
         </div>
     </div>
 </div>
@@ -148,5 +184,29 @@
             document.getElementById('selectedDirection').value = this.dataset.direction;
         });
     });
+
+    function showJson(jsonData) {
+        const formatted = JSON.stringify(jsonData, null, 2);
+        document.getElementById('jsonContent').textContent = formatted;
+    }
 </script>
+<style>
+    .signal-info {
+        cursor: pointer;
+    }
+    .json-content {
+        font-family: monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 4px;
+        border: 1px solid #dee2e6;
+        margin: 0;
+    }
+    .modal-lg {
+        max-width: 800px;
+    }
+</style>
 {% endblock %}

@@ -201,7 +201,7 @@ def publish_signal(data_dict):
                   data_dict['strategy'].get('market_position', ''),
                   data_dict['strategy'].get('market_position_size', ''),
                   data_dict['strategy'].get('order_price', ''),
-                  data_dict['strategy'].get('order_message', ''),
+                  json.dumps(data_dict),
                   skip_reason))
             db.commit()
             app.logger.info(f"Skipped signal recorded in database")  # Debug log
@@ -209,7 +209,7 @@ def publish_signal(data_dict):
             app.logger.info(f"Error recording skipped signal: {str(e)}")  # Debug log
             db.rollback()
         return
-    
+
     # Normal signal processing
     app.logger.info(f"Processing normal signal")  # Debug log
     db = get_db()
@@ -228,7 +228,7 @@ def publish_signal(data_dict):
               data_dict['strategy'].get('market_position', ''),
               data_dict['strategy'].get('market_position_size', ''),
               data_dict['strategy'].get('order_price', ''),
-              data_dict['strategy'].get('order_message', '')))
+              json.dumps(data_dict)))
         db.commit()
         id = cursor.fetchone()[0]
         app.logger.info(f"Signal recorded with ID: {id}")  # Debug log
@@ -246,7 +246,7 @@ def publish_signal(data_dict):
         if not data_dict.get('is_retry'):  # Don't schedule retries of retries
             schedule_signal_retry(data_dict)
             app.logger.info(f"Retry scheduled")  # Debug log
-            
+
     except Exception as e:
         app.logger.info(f"Error processing signal: {str(e)}")  # Debug log
         db.rollback()

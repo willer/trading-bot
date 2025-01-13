@@ -82,6 +82,14 @@ def process_order(direction, ticker):
             "bot": "human",  # Send 'live' to the broker
             "market_position": direction,
             "market_position_size": position_size,
+            "order_message": json.dumps({
+                "ticker": ticker.upper(),
+                "strategy": {
+                    "bot": "human",
+                    "market_position": direction,
+                    "market_position_size": position_size
+                }
+            })
         }
     }
     publish_signal(broker_message)
