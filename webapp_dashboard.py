@@ -3,7 +3,7 @@ import hashlib
 import os
 import random
 from flask import json, redirect, render_template, request, url_for
-from webapp_core import app, get_db, get_signal, get_signals, is_logged_in, publish_signal, r
+from webapp_core import app, get_db, get_signal, get_signals, is_logged_in, save_signal, r
 from datetime import datetime, time as dt_time
 
 @app.route('/dashboard')
@@ -44,7 +44,7 @@ def resend():
     signal = get_signal(id)
     if signal:
         data_dict = json.loads(signal["order_message"])
-        publish_signal(signal)
+        save_signal(signal)
         return render_template('action_response.html', message="Signal resent successfully!", redirect_url=url_for('dashboard'))
     else:
         return render_template('action_response.html', message="Signal not found!", redirect_url=url_for('dashboard'))
@@ -92,7 +92,8 @@ def process_order(direction, ticker):
             })
         }
     }
-    publish_signal(broker_message)
+    save_signal(broker_message)
+    return redirect(url_for('dashboard'))
 
 
 @app.route('/execute_action', methods=['POST'])
@@ -117,7 +118,7 @@ def resend_action(id):
     signal = get_signal(id)
     if signal:
         data_dict = json.loads(signal["order_message"])
-        publish_signal(data_dict)
+        save_signal(data_dict)
         return render_template('action_response.html', message="Signal resent successfully!", redirect_url=url_for('dashboard'))
     else:
         return render_template('action_response.html', message="Signal not found!", redirect_url=url_for('dashboard'))

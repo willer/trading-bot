@@ -1,7 +1,7 @@
 import hashlib
 import traceback
 from flask import redirect, render_template, request, session, url_for
-from webapp_core import app, get_db, is_logged_in, USER_CREDENTIALS, publish_signal, r, p, process_signal_retries
+from webapp_core import app, get_db, is_logged_in, USER_CREDENTIALS, save_signal, r, p, process_signal_retries
 from flask_apscheduler import APScheduler
 import webapp_reports
 import webapp_dashboard
@@ -54,7 +54,8 @@ def webhook():
     if data:
         data_dict = request.json
         try:
-            publish_signal(data_dict)
+            save_signal(data_dict)
+            return "OK", 200
         except Exception as e:
             app.logger.error(f"Error publishing signal: {e}; data: {data_dict}; traceback: {traceback.format_exc()}")
             return {"code": "failure", "message": str(e)}, 500

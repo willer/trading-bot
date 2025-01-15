@@ -142,9 +142,9 @@ def process_signal_retries():
     db = get_db()
     cursor = db.cursor()
     
-    # Get signals due for retry, but only if they're not too old
+    # Get signals due for retry
     cursor.execute("""
-        SELECT id, signal_data, retries_remaining 
+        SELECT id, signal_data, retries_remaining, original_signal_id, retry_time
         FROM signal_retries 
         WHERE retry_time <= NOW() 
         AND retry_time >= NOW() - INTERVAL '3 minutes'
@@ -153,17 +153,36 @@ def process_signal_retries():
     
     retries = cursor.fetchall()
     for retry in retries:
-        retry_id, signal_data, retries_left = retry
+        retry_id, signal_data, retries_left, original_signal_id, retry_time = retry
         
-        # Re-publish the signal
-        # Check if signal_data is already a dict
-        if isinstance(signal_data, dict):
-            signal_dict = signal_data
-        else:
-            signal_dict = json.loads(signal_data)
+        # Parse signal data
+        signal_dict = json.loads(signal_data) if isinstance(signal_data, str) else signal_data
+        
+        # Skip if this is a flat signal and there's a directional signal within 3 seconds
+        if signal_dict['strategy'].get('market_position', '') == 'flat':
+            cursor.execute("""
+                SELECT * FROM signals 
+                WHERE ticker = %s 
+                AND bot = %s 
+                AND market_position IN ('long', 'short')
+                AND timestamp BETWEEN %s - INTERVAL '3 seconds' AND %s + INTERVAL '3 seconds'
+                LIMIT 1
+            """, (
+                signal_dict['ticker'], 
+                signal_dict['strategy'].get('bot', ''),
+                retry_time,
+                retry_time
+            ))
             
+            if cursor.fetchone():
+                app.logger.info(f"Skipping flat signal due to nearby directional signal")
+                cursor.execute("UPDATE signal_retries SET retries_remaining = 0 WHERE id = %s", (retry_id,))
+                db.commit()
+                continue
+        
+        # Publish the signal
         signal_dict['is_retry'] = True
-        app.logger.info(f"Retrying signal: {json.dumps(signal_dict, default=str)}")
+        app.logger.info(f"Publishing signal: {json.dumps(signal_dict, default=str)}")
         r.publish('tradingview', json.dumps(signal_dict))
         
         # Update retry count
@@ -175,43 +194,12 @@ def process_signal_retries():
         
     db.commit()
 
-def publish_signal(data_dict):
+def save_signal(data_dict):
     app.logger.info(f"Received signal: {json.dumps(data_dict, default=str)}")  # Debug log
     
-    # Check if we should skip this flat signal
-    should_skip, skip_reason = should_skip_flat_signal(data_dict)
-    if should_skip:
-        app.logger.info(f"Signal skipped: {skip_reason}")  # Debug log
-        # Still record the signal but mark it as skipped
-        data_dict['strategy']['skipped'] = skip_reason
-        
-        db = get_db()
-        cursor = db.cursor()
-        try:
-            cursor.execute("""
-                INSERT INTO signals 
-                (ticker, bot, order_action, order_contracts, market_position, 
-                 market_position_size, order_price, order_message, skipped) 
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id
-            """, (data_dict['ticker'],
-                  data_dict['strategy'].get('bot', ''),
-                  data_dict['strategy'].get('order_action', ''),
-                  data_dict['strategy'].get('order_contracts', ''),
-                  data_dict['strategy'].get('market_position', ''),
-                  data_dict['strategy'].get('market_position_size', ''),
-                  data_dict['strategy'].get('order_price', ''),
-                  json.dumps(data_dict),
-                  skip_reason))
-            db.commit()
-            app.logger.info(f"Skipped signal recorded in database")  # Debug log
-        except Exception as e:
-            app.logger.info(f"Error recording skipped signal: {str(e)}")  # Debug log
-            db.rollback()
-        return
-
-    # Normal signal processing
-    app.logger.info(f"Processing normal signal")  # Debug log
+    # Set retry time to 3 seconds from now
+    retry_time = datetime.datetime.now() + timedelta(seconds=3)
+    
     db = get_db()
     cursor = db.cursor()
     try:
@@ -236,16 +224,14 @@ def publish_signal(data_dict):
         # Add the signal ID to the data
         data_dict['strategy']['id'] = id
         
-        # Publish the signal
-        signal_str = json.dumps(data_dict)
-        app.logger.info(f"Publishing signal: {signal_str}")
-        r.publish('tradingview', signal_str)
-        app.logger.info(f"Signal published to Redis")  # Debug log
-        
-        # Schedule a retry
-        if not data_dict.get('is_retry'):  # Don't schedule retries of retries
-            schedule_signal_retry(data_dict)
-            app.logger.info(f"Retry scheduled")  # Debug log
+        # Schedule for processing
+        cursor.execute("""
+            INSERT INTO signal_retries 
+            (original_signal_id, retry_time, signal_data, retries_remaining)
+            VALUES (%s, %s, %s, %s)
+        """, (id, retry_time, json.dumps(data_dict), 1))
+        db.commit()
+        app.logger.info(f"Signal scheduled for processing at {retry_time}")  # Debug log
 
     except Exception as e:
         app.logger.info(f"Error processing signal: {str(e)}")  # Debug log
