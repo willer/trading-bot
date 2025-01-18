@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# Source Datadog functions
+. ./datadog-shell.sh
+
 logfile=logs/$0.log
 max_log_size=10M
 num_logs_to_keep=5
@@ -17,16 +20,38 @@ rotate_logs() {
     fi
 }
 
-# start broker connection point
-# this is in a while loop because sometimes the broker script crashes
+# Ensure logs directory exists
+mkdir -p logs
+
+# Rotate logs if needed
+rotate_logs
+
+# Find Python executable
+py=`which python`
+if [ -z "$py" ]; then py=`which python3`; fi
+
+# Start the broker with monitoring
 while true; do
-    rotate_logs
-    echo --------------------------------- |tee -a $logfile
-    date |tee -a $logfile
-    echo Starting up |tee -a $logfile
-    py=`which python`
-    if [ -z "$py" ]; then py=`which python3`; fi
-    "$py" -u broker.py live 2>&1 |tee -a $logfile
-    echo Restarting in 2s |tee -a $logfile
-    sleep 2
+    # Send startup event
+    dd_event \
+        "Broker Started" \
+        "Broker process has been started" \
+        "info" \
+        "service:broker"
+
+    echo "Starting broker..." | tee -a "$logfile"
+    
+    # Start broker with monitoring (with proper quoting)
+    dd_monitor_cmd "broker" '"'"$py"'" -u broker.py live' 2>&1 | tee -a "$logfile"
+    
+    exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        echo "Broker crashed with exit code $exit_code" | tee -a "$logfile"
+        dd_event \
+            "Broker Crashed" \
+            "Broker process exited with code $exit_code, restarting in 2s" \
+            "warning" \
+            "service:broker"
+        sleep 2
+    fi
 done

@@ -359,6 +359,7 @@ class broker_ibkr(broker_root):
             # figure out how much to buy or sell
             position_variation = round(amount - position_size, 0)
 
+            trade = None
             # if we need to buy or sell, do it with a limit order
             if position_variation != 0:
                 if stock.market_order:
@@ -382,13 +383,11 @@ class broker_ibkr(broker_root):
                 print("  placing order: ", order)
                 trade = self.conn.placeOrder(stock, order)
                 print("    trade: ", trade)
-
-                # Track successful trade
                 self.track_trade(symbol, "set_position", amount, success=True)
-            return trade  # Return the order ID
+
+            return trade
 
         except Exception as e:
-            # Track failed trade
             self.track_trade(symbol, "set_position", amount, success=False)
             self.handle_ex(e, context=f"set_position_{symbol}")
             raise
