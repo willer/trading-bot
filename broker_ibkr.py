@@ -19,22 +19,22 @@ ticker_cache = {}
 # declare a class to represent the IB driver
 class broker_ibkr(broker_root):
     def __init__(self, bot, account):
-        self.config = configparser.ConfigParser()
-        self.config.read('config.ini')
-        self.bot = bot
-        self.account = account
-        self.aconfig = self.get_account_config(account)
+        super().__init__(bot, account)  # Call parent init first
         self.conn = None
         
         # Initialize connection at startup
         try:
             print(f"IB: Initializing connection for account {account}...")
             self.load_conn()
-            if self.check_connection():
+            connected = self.check_connection()
+            self.track_connection(connected)
+            if connected:
                 print(f"IB: Successfully initialized connection for account {account}")
             else:
                 print(f"IB: Failed to establish initial connection for account {account}")
+                self.handle_ex("Failed to establish initial connection", context="connection")
         except Exception as e:
+            self.handle_ex(e, context="initialization")
             print(f"IB: Error during initial connection for account {account}: {str(e)}")
 
     def load_conn(self):
@@ -88,11 +88,13 @@ class broker_ibkr(broker_root):
                         raise
 
     def check_connection(self):
-        """Check if the connection is alive and reconnect if needed"""
-        if self.conn is None or not self.conn.isConnected():
-            print("IB: Connection lost or not established, attempting to reconnect...")
-            self.load_conn()
-        return self.conn.isConnected()
+        try:
+            is_connected = self.conn and self.conn.isConnected()
+            self.track_connection(is_connected)
+            return is_connected
+        except Exception as e:
+            self.handle_ex(e, context="check_connection")
+            return False
 
     def get_stock(self, symbol, forhistory=False):
         if not self.check_connection():
@@ -345,47 +347,51 @@ class broker_ibkr(broker_root):
         return psize
 
     async def set_position_size(self, symbol, amount):
-        print(f"set_position_size({self.account},{symbol},{amount})")
-        if False:
-            print(f"  SKIPPING")
-            return
+        try:
+            print(f"set_position_size({self.account},{symbol},{amount})")
+            
+            self.load_conn()
+            stock = self.get_stock(symbol)
 
-        self.load_conn()
-        stock = self.get_stock(symbol)
+            # get the current position size
+            position_size = self.get_position_size(symbol)
 
-        # get the current position size
-        position_size = self.get_position_size(symbol)
+            # figure out how much to buy or sell
+            position_variation = round(amount - position_size, 0)
 
-        # figure out how much to buy or sell
-        position_variation = round(amount - position_size, 0)
-
-        # if we need to buy or sell, do it with a limit order
-        if position_variation != 0:
-
-            if stock.market_order:
-                if position_variation > 0:
-                    order = MarketOrder('BUY', position_variation)
+            # if we need to buy or sell, do it with a limit order
+            if position_variation != 0:
+                if stock.market_order:
+                    if position_variation > 0:
+                        order = MarketOrder('BUY', position_variation)
+                    else:
+                        order = MarketOrder('SELL', abs(position_variation))
                 else:
-                    order = MarketOrder('SELL', abs(position_variation))
+                    price = self.get_price(symbol)
+                    high_limit_price = self.x_round(price * 1.008, stock.round_precision)
+                    low_limit_price  = self.x_round(price * 0.992, stock.round_precision)
 
-            else:
-                price = self.get_price(symbol)
-                high_limit_price = self.x_round(price * 1.008, stock.round_precision)
-                low_limit_price  = self.x_round(price * 0.992, stock.round_precision)
+                    if position_variation > 0:
+                        order = LimitOrder('BUY', position_variation, high_limit_price)
+                    else:
+                        order = LimitOrder('SELL', abs(position_variation), low_limit_price)
 
-                if position_variation > 0:
-                    order = LimitOrder('BUY', position_variation, high_limit_price)
-                else:
-                    order = LimitOrder('SELL', abs(position_variation), low_limit_price)
+                order.outsideRth = True
+                order.account = self.account
 
-            order.outsideRth = True
-            order.account = self.account
+                print("  placing order: ", order)
+                trade = self.conn.placeOrder(stock, order)
+                print("    trade: ", trade)
 
-            print("  placing order: ", order)
-            trade = self.conn.placeOrder(stock, order)
-            print("    trade: ", trade)
-
+                # Track successful trade
+                self.track_trade(symbol, "set_position", amount, success=True)
             return trade  # Return the order ID
+
+        except Exception as e:
+            # Track failed trade
+            self.track_trade(symbol, "set_position", amount, success=False)
+            self.handle_ex(e, context=f"set_position_{symbol}")
+            raise
 
     async def is_trade_completed(self, trade):
         return trade.orderStatus.status in ['Filled', 'Cancelled', 'ApiCancelled']
@@ -465,8 +471,8 @@ class broker_ibkr(broker_root):
 
 
     def health_check_prices(self):
-        self.get_price('SOXL')
-        self.get_price('SOXS')
+        #self.get_price('SOXL')
+        #self.get_price('SOXS')
         self.get_price('TQQQ')
         self.get_price('SQQQ')
         self.get_price('NQ1!')

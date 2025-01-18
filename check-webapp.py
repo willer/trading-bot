@@ -1,7 +1,8 @@
 import nest_asyncio
 import configparser
 import traceback
-from textmagic.rest import TextmagicRestClient
+from datadog import initialize, statsd
+from datadog.api import Event
 
 nest_asyncio.apply()
 
@@ -10,25 +11,35 @@ import requests
 config = configparser.ConfigParser()
 config.read('config.ini')
 
+# Initialize the Datadog client
+initialize(
+    api_key=config['DEFAULT'].get('datadog-api-key', ''),
+    app_key=config['DEFAULT'].get('datadog-app-key', '')
+)
+
 def handle_ex(e):
-    tmu = config['DEFAULT']['textmagic-username']
-    tmk = config['DEFAULT']['textmagic-key']
-    tmp = config['DEFAULT']['textmagic-phone']
-    if tmu != '':
-        tmc = TextmagicRestClient(tmu, tmk)
-        # if e is a string send it, otherwise send the first 300 chars of the traceback
-        if isinstance(e, str):
-            tmc.messages.create(phones=tmp, text="webapp FAIL " + e)
-        else:
-            tmc.messages.create(phones=tmp, text="webapp FAIL " + traceback.format_exc()[0:300])
+    # Send an event to Datadog
+    error_text = str(e) if isinstance(e, str) else traceback.format_exc()
+    
+    # Increment error counter
+    statsd.increment('webapp.health_check.errors', tags=['service:webapp'])
+    
+    # Send detailed event
+    Event.create(
+        title='Webapp Health Check Failed',
+        text=error_text,
+        alert_type='error',
+        tags=['service:webapp', 'monitor:health_check']
+    )
 
 try:
     # try to load the url
     url = f"http://{config['DEFAULT']['ngrok-subdomain']}.ngrok.io/health"
 
-    #print(f"Checking {url}")
     response = requests.get(url)
     if response.status_code == 200:
+        # Track successful health checks
+        statsd.increment('webapp.health_check.success', tags=['service:webapp'])
         exit(0)
     else:
         raise Exception(f"Error! The server returned a {response.status_code} status code.")

@@ -4,7 +4,6 @@ import sys
 import nest_asyncio
 import configparser
 import traceback
-from textmagic.rest import TextmagicRestClient
 
 nest_asyncio.apply()
 

@@ -2,8 +2,9 @@ redis
 ib_insync
 flask>=2.0
 alpaca-py
-textmagic
 yfinance
 tzdata
 pandas
 plotly
+ddtrace>=1.0.0
+datadog>=0.45.0

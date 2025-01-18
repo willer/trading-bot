@@ -1,5 +1,6 @@
 import configparser
-from twilio.rest import Client
+from datadog import initialize, statsd
+from datadog.api import Event
 import traceback
 
 class broker_root:
@@ -9,6 +10,12 @@ class broker_root:
         self.bot = bot
         self.account = account
         self.aconfig = self.get_account_config(account)
+        
+        # Initialize Datadog
+        initialize(
+            api_key=self.config['DEFAULT'].get('datadog-api-key', ''),
+            app_key=self.config['DEFAULT'].get('datadog-app-key', '')
+        )
 
     def get_account_config(self, account):
         account_config = self.config[account]
@@ -17,25 +24,53 @@ class broker_root:
             group_config = self.config[group]
             # Merge group config into account config, account config takes precedence
             merged_config = {**group_config, **account_config}
-            #print(f"merged_config({account}): {merged_config}")
             return merged_config
         return account_config
 
-    def handle_ex(self, e):
-        account_sid = self.config['DEFAULT'].get('twilio-account-sid', '')
-        auth_token = self.config['DEFAULT'].get('twilio-auth-token', '')
-        from_phone = self.config['DEFAULT'].get('twilio-from-phone', '')
-        to_phone = self.config['DEFAULT'].get('twilio-to-phone', '')
-        if account_sid and auth_token and from_phone and to_phone:
-            client = Client(account_sid, auth_token)
-            # if e is a string send it, otherwise send the first 300 chars of the traceback
-            message_body = f"broker-ibkr {self.bot} FAIL "
-            message_body += e if isinstance(e, str) else traceback.format_exc()[:300]
-            message = client.messages.create(
-                body=message_body,
-                from_=from_phone,
-                to=to_phone
-            )
+    def handle_ex(self, e, context="unknown"):
+        # Track error metric
+        tags = [
+            f'service:broker',
+            f'bot:{self.bot}',
+            f'account:{self.account}',
+            f'error_context:{context}'
+        ]
+        statsd.increment('broker.errors', tags=tags)
+        
+        # Send detailed event
+        error_text = str(e) if isinstance(e, str) else traceback.format_exc()
+        Event.create(
+            title=f'Broker Error: {self.bot}/{self.account}',
+            text=f'Context: {context}\n\nError:\n{error_text}',
+            alert_type='error',
+            tags=tags
+        )
+
+    def track_trade(self, symbol, action, amount, success=True):
+        """Track trading activity metrics"""
+        tags = [
+            f'service:broker',
+            f'bot:{self.bot}',
+            f'account:{self.account}',
+            f'symbol:{symbol}',
+            f'action:{action}'
+        ]
+        
+        # Track trade count
+        statsd.increment('broker.trades', tags=tags + [f'success:{success}'])
+        
+        # Track position size changes
+        if success:
+            statsd.gauge('broker.position_size', amount, tags=tags)
+
+    def track_connection(self, connected):
+        """Track broker connection status"""
+        tags = [
+            f'service:broker',
+            f'bot:{self.bot}',
+            f'account:{self.account}'
+        ]
+        statsd.gauge('broker.connected', 1 if connected else 0, tags=tags)
 
     # function to round to the nearest decimal. y=10 for dimes, y=4 for quarters, y=100 for pennies
     def x_round(self,x,y):
