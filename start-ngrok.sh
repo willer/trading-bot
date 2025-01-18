@@ -24,9 +24,9 @@ while grep -s "ngrok-run = yes" config.ini >/dev/null ; do
 	
 	# Start ngrok with monitoring
 	if [ "$subd" = "" ] ; then
-		dd_monitor_cmd "ngrok" "ngrok http 6008" 2>&1 | tee -a "$logfile"
+		dd_monitor_cmd "ngrok" "ngrok http 6008"
 	else
-		dd_monitor_cmd "ngrok" "ngrok http --subdomain=$subd 6008" 2>&1 | tee -a "$logfile"
+		dd_monitor_cmd "ngrok" "ngrok http --subdomain=$subd 6008"
 	fi
 	
 	exit_code=$?
