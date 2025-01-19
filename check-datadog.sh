@@ -17,7 +17,7 @@ echo
 # First send a test event
 echo "Sending test event..."
 echo "URL: https://api.$SITE/api/v1/events"
-response=$(curl -v -s -w "\nHTTP_STATUS: %{http_code}\n" \
+response=$(curl -s -w "\nHTTP_STATUS: %{http_code}\n" \
     -X POST "https://api.$SITE/api/v1/events" \
     -H "Accept: application/json" \
     -H "Content-Type: application/json" \
@@ -45,7 +45,7 @@ echo
 # Get events with full output
 echo "Fetching events..."
 echo "URL: https://api.$SITE/api/v1/events?start=$start_time&end=$end_time"
-response=$(curl -v -s -w "\nHTTP_STATUS: %{http_code}\n" -X GET \
+response=$(curl -s -w "\nHTTP_STATUS: %{http_code}\n" -X GET \
     "https://api.$SITE/api/v1/events?start=$start_time&end=$end_time" \
     -H "Accept: application/json" \
     -H "DD-API-KEY: $API_KEY" \
@@ -63,7 +63,7 @@ echo
 echo "Checking metrics from the last hour..."
 echo "Fetching metrics..."
 echo "URL: https://api.$SITE/api/v1/query?from=$start_time&to=$end_time&query=system.cpu.idle"
-response=$(curl -v -s -w "\nHTTP_STATUS: %{http_code}\n" -X GET \
+response=$(curl -s -w "\nHTTP_STATUS: %{http_code}\n" -X GET \
     "https://api.$SITE/api/v1/query?from=$start_time&to=$end_time&query=system.cpu.idle" \
     -H "Accept: application/json" \
     -H "DD-API-KEY: $API_KEY" \

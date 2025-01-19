@@ -11,7 +11,7 @@ echo "Using site: $SITE"
 
 # Send a simple test event
 echo "Sending test event..."
-curl -v -X POST "https://api.$SITE/api/v1/events" \
+curl -X POST "https://api.$SITE/api/v1/events" \
     -H "Accept: application/json" \
     -H "Content-Type: application/json" \
     -H "DD-API-KEY: $API_KEY" \
@@ -24,7 +24,7 @@ curl -v -X POST "https://api.$SITE/api/v1/events" \
     }'
 
 echo -e "\n\nTrying to read events..."
-curl -v -X GET "https://api.$SITE/api/v1/events?start=$(date +%s -d '5 minutes ago')&end=$(date +%s)" \
+curl -X GET "https://api.$SITE/api/v1/events?start=$(date +%s -d '5 minutes ago')&end=$(date +%s)" \
     -H "Accept: application/json" \
     -H "DD-API-KEY: $API_KEY" \
     -H "DD-APPLICATION-KEY: $APP_KEY" 

@@ -10,7 +10,7 @@ echo
 # Send a test event
 echo "Sending test event to Datadog..."
 echo "URL: https://api.$DATADOG_SITE/api/v1/events"
-response=$(curl -v -s -w "\nHTTP_STATUS: %{http_code}\n" \
+response=$(curl -s -w "\nHTTP_STATUS: %{http_code}\n" \
   -X POST "https://api.$DATADOG_SITE/api/v1/events" \
   -H "Accept: application/json" \
   -H "Content-Type: application/json" \

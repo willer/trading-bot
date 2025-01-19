@@ -11,8 +11,8 @@ if [ -z "$DATADOG_API_KEY" ]; then
     exit 1
 fi
 
-echo "Using Datadog API Key: ${DATADOG_API_KEY:0:5}..."
-echo "Using Datadog site: $DATADOG_SITE"
+#echo "Using Datadog API Key: ${DATADOG_API_KEY:0:5}..."
+#echo "Using Datadog site: $DATADOG_SITE"
 
 # Function to send event to Datadog
 dd_event() {
@@ -62,11 +62,11 @@ dd_metric() {
         \"tags\": [\"$tags\"]
     }]
 }"
-    echo "Request payload:"
-    echo "$json_data"
+    #echo "Request payload:"
+    #echo "$json_data"
     
     # Use curl to send metric to Datadog API
-    response=$(curl -v -s -w "\nHTTP_STATUS: %{http_code}\n" -X POST "https://api.$DATADOG_SITE/api/v1/series" \
+    response=$(curl -s -w "\nHTTP_STATUS: %{http_code}\n" -X POST "https://api.$DATADOG_SITE/api/v1/series" \
         -H "Accept: application/json" \
         -H "Content-Type: application/json" \
         -H "DD-API-KEY: $DATADOG_API_KEY" \
@@ -74,8 +74,8 @@ dd_metric() {
         -d "$json_data" 2>&1)
     
     http_status=$(echo "$response" | grep "HTTP_STATUS:" | cut -d' ' -f2)
-    echo "Response from Datadog (status $http_status):"
-    echo "$response"
+    #echo "Response from Datadog (status $http_status):"
+    #echo "$response"
 }
 
 # Function to wrap a command with Datadog monitoring
