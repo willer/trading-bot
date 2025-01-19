@@ -22,147 +22,123 @@ class StockStub:
 # declare a class to represent the IB driver
 class broker_alpaca(broker_root):
     def __init__(self, bot, account):
-        self.config = configparser.ConfigParser()
-        self.config.read('config.ini')
-        self.bot = bot
-        self.account = account
-        self.aconfig = self.get_account_config(account)
-        self.conn = None
-        self.dataconn = None
+        try:
+            self.config = configparser.ConfigParser()
+            self.config.read('config.ini')
+            self.bot = bot
+            self.account = account
+            self.aconfig = self.get_account_config(account)
+            self.conn = None
+            self.dataconn = None
 
-        # pick up a cached IB connection if it exists; cache lifetime is 5 mins
-        alcachekey = f"{self.aconfig['key']}"
-        if alcachekey in alpacaconn_cache and alpacaconn_cache[alcachekey]['time'] > time.time() - 300:
-            self.conn = alpacaconn_cache[alcachekey]['conn']
-            self.dataconn = alpacaconn_cache[alcachekey]['dataconn']
+            # pick up a cached IB connection if it exists; cache lifetime is 5 mins
+            alcachekey = f"{self.aconfig['key']}"
+            if alcachekey in alpacaconn_cache and alpacaconn_cache[alcachekey]['time'] > time.time() - 300:
+                self.conn = alpacaconn_cache[alcachekey]['conn']
+                self.dataconn = alpacaconn_cache[alcachekey]['dataconn']
 
-        if self.conn is None:
-            try:
-                print(f"Alpaca: Trying to connect...")
+            if self.conn is None:
                 paper = True if self.aconfig['paper'] == 'yes' else False
                 self.conn = TradingClient(api_key=self.aconfig['key'], secret_key=self.aconfig['secret'], paper=paper)
                 self.dataconn = StockHistoricalDataClient(api_key=self.aconfig['key'], secret_key=self.aconfig['secret'])
 
-            except Exception as e:
-                self.handle_ex(e)
-                raise
-
-            # cache the connection
-            alpacaconn_cache[alcachekey] = {'conn': self.conn, 'dataconn': self.dataconn, 'time': time.time()}
-            print("Alpaca: Connected")
+                # cache the connection
+                alpacaconn_cache[alcachekey] = {
+                    'conn': self.conn,
+                    'dataconn': self.dataconn,
+                    'time': time.time()
+                }
+        except Exception as e:
+            self.handle_ex(e, "init", extra_tags={"bot": bot, "account": account})
+            raise
 
     def get_stock(self, symbol):
-        # normalization of the symbol, from TV to Alpaca form
-        stock = StockStub(symbol)
-        symbol = symbol.replace('1!', '')
-        if symbol in ['NQ', 'ES', 'RTY', 'MES', 'MNQ', 'M2K']:
-            stock.is_futures = 1
-        elif symbol in ['YM']:
-            stock.is_futures = 1
-        elif symbol in ['ZN']:
-            stock.is_futures = 1
-        elif symbol in ['VX']:
-            stock.is_futures = 1
-        # forex futures listed at https://www.interactivebrokers.com/en/trading/cme-wti-futures.php
-        elif symbol in ['M6E', 'M6A', 'M6B', 'MJY', 'MSF', 'MIR', 'MNH']:
-            stock.is_futures = 1
-        elif symbol in ['MCD']:
-            stock.is_futures = 1
-        elif symbol in ['HE']:
-            stock.is_futures = 1
-        elif symbol == 'DX':
-            stock.is_futures = 1
-        elif symbol in ['CL', 'NG']:
-            stock.is_futures = 1
-        elif symbol in ['GC', 'SI', 'HG', 'MGC', 'MSI', 'MHG']:
-            stock.is_futures = 1
-        else:
-            stock.is_futures = 0
-
-        return stock
+        try:
+            # normalization of the symbol, from TV to Alpaca form
+            if symbol.endswith('1!'):
+                symbol = symbol[:-2]
+            return StockStub(symbol)
+        except Exception as e:
+            self.handle_ex(e, f"get_stock_{symbol}")
+            return None
 
     def get_price(self, symbol):
-        stock = self.get_stock(symbol)
-
-        # keep a cache of tickers to avoid repeated calls to IB, but only for 5s
-        if symbol in ticker_cache and time.time() - ticker_cache[symbol]['time'] < 5:
-            ticker = ticker_cache[symbol]['ticker']
-        else:
-            multisymbol_request_params = StockLatestQuoteRequest(symbol_or_symbols=[symbol])
-            latest_multisymbol_quotes = self.dataconn.get_stock_latest_quote(multisymbol_request_params)
-            if symbol not in latest_multisymbol_quotes:
-                # can't find this symbol
-                print(f"Alpaca: get_price({symbol}) failed")
+        try:
+            stock = self.get_stock(symbol)
+            if not stock:
+                self.handle_ex(f"Unable to get stock info for {symbol}", "get_price")
                 return 0
-            ticker = latest_multisymbol_quotes[symbol]
-            ticker_cache[symbol] = {'ticker': ticker, 'time': time.time()}
 
-        price = ticker.ask_price
-        print(f"  get_price({symbol}) -> {price}")
-        return price
+            request = StockLatestQuoteRequest(symbol=stock.symbol)
+            quote = self.dataconn.get_stock_latest_quote(request)
+            if not quote:
+                self.handle_ex(f"Unable to get quote for {symbol}", "get_price")
+                return 0
+
+            return quote[stock.symbol].ask_price
+        except Exception as e:
+            self.handle_ex(e, f"get_price_{symbol}")
+            return 0
 
     def get_net_liquidity(self):
-        # get the current Alpaca net liquidity in USD
-        net_liquidity = self.conn.get_account().last_equity
-        print(f"  get_net_liquidity() -> {net_liquidity}")
-        return float(net_liquidity)
+        try:
+            account = self.conn.get_account()
+            return float(account.equity)
+        except Exception as e:
+            self.handle_ex(e, "get_net_liquidity")
+            return 0
 
     def get_position_size(self, symbol):
-        # get the current Alpaca position size for this stock and this account
-        position_size = 0
-        for position in self.conn.get_all_positions():
-            if position.symbol == symbol:
-                position_size = int(position.qty)
-                break
-        print(f"  get_position_size({symbol}) -> {position_size}")
-        return position_size
+        try:
+            stock = self.get_stock(symbol)
+            if not stock:
+                self.handle_ex(f"Unable to get stock info for {symbol}", "get_position_size")
+                return 0
 
+            try:
+                position = self.conn.get_position(stock.symbol)
+                return int(position.qty)
+            except:
+                return 0
+        except Exception as e:
+            self.handle_ex(e, f"get_position_size_{symbol}")
+            return 0
 
     async def set_position_size(self, symbol, amount):
-        print(f"set_position_size({symbol},{amount}) acct {self.account}")
+        try:
+            stock = self.get_stock(symbol)
+            if not stock:
+                self.handle_ex(f"Unable to get stock info for {symbol}", "set_position_size")
+                return None
 
-        # get the current position size
-        position_size = self.get_position_size(symbol)
+            current = self.get_position_size(symbol)
+            if current == amount:
+                return None
 
-        # figure out how much to buy or sell
-        position_variation = round(amount - position_size, 0)
+            side = OrderSide.BUY if amount > current else OrderSide.SELL
+            qty = abs(amount - current)
 
-        # if we need to buy or sell, do it with a limit order
-        if position_variation != 0:
-            price = self.get_price(symbol)
-            high_limit_price = round(price * 1.005, 2)
-            low_limit_price  = round(price * 0.995, 2)
-
-            # convert position_variation to a string with no decimal places
-            position_variation = int(position_variation)
-
-            if position_variation > 0:
-                limit_order_data = LimitOrderRequest(
-                    symbol=symbol,
-                    limit_price=high_limit_price,
-                    qty=abs(position_variation),
-                    side=OrderSide.BUY,
-                    time_in_force=TimeInForce.DAY,
-                    extended_hours = True
-                   )
-            else:
-                limit_order_data = LimitOrderRequest(
-                    symbol=symbol,
-                    limit_price=low_limit_price,
-                    qty=abs(position_variation),
-                    side=OrderSide.SELL,
-                    time_in_force=TimeInForce.DAY,
-                    extended_hours = True
-                   )
-
-            print("  placing order: ", limit_order_data)
-            trade = self.conn.submit_order(order_data=limit_order_data)
-            print("    trade: ", trade)
-            return trade.id  # Return the order ID
+            order = self.conn.submit_order(
+                symbol=stock.symbol,
+                qty=qty,
+                side=side,
+                type='market',
+                time_in_force=TimeInForce.DAY
+            )
+            return order.id
+        except Exception as e:
+            self.handle_ex(e, f"set_position_size_{symbol}", extra_tags={"amount": amount})
+            return None
 
     async def is_trade_completed(self, order_id):
-        trade = self.conn.get_order_by_id(order_id)
-        return trade.status in ['filled', 'canceled', 'expired']
+        try:
+            if not order_id:
+                return True
+            order = self.conn.get_order(order_id)
+            return order.status in ['filled', 'canceled', 'expired']
+        except Exception as e:
+            self.handle_ex(e, "check_trade_completion")
+            return False
 
     def download_data(self, symbol, end, duration, timeframe, cachedata=False):
         if end != "":
@@ -183,9 +159,16 @@ class broker_alpaca(broker_root):
         return bars.df
 
     def health_check_prices(self):
-        self.get_price('SOXL')
+        try:
+            self.get_price('TQQQ')
+        except Exception as e:
+            self.handle_ex(e, "health_check_prices")
+            raise
 
     def health_check_positions(self):
-        self.get_net_liquidity()
-        self.get_position_size('SOXL')
-        self.get_position_size('SOXS')
+        try:
+            self.get_net_liquidity()
+            positions = self.conn.get_all_positions()
+        except Exception as e:
+            self.handle_ex(e, "health_check_positions")
+            raise

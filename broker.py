@@ -6,7 +6,7 @@ import asyncio, datetime
 import sys
 import nest_asyncio
 import configparser
-import traceback
+from core_error import handle_ex
 from twilio.rest import Client
 from datadog import initialize, statsd
 from datadog.api import Event
@@ -27,26 +27,107 @@ bot = sys.argv[1]
 
 last_time_traded = {}
 
-config = configparser.ConfigParser()
-config.read('config.ini')
+try:
+    config = configparser.ConfigParser()
+    config.read('config.ini')
 
-
-# Replace SQLite connection pool with PostgreSQL connection pool
-db_pool = psycopg2.pool.SimpleConnectionPool(
-    1, 20,
-    host=config['database']['database-host'],
-    port=config['database']['database-port'],
-    dbname=config['database']['database-name'],
-    user=config['database']['database-user'],
-    password=config['database']['database-password']
-)
+    # Replace SQLite connection pool with PostgreSQL connection pool
+    db_pool = psycopg2.pool.SimpleConnectionPool(
+        1, 20,
+        host=config['database']['database-host'],
+        port=config['database']['database-port'],
+        dbname=config['database']['database-name'],
+        user=config['database']['database-user'],
+        password=config['database']['database-password']
+    )
+except Exception as e:
+    handle_ex(e, "broker_init", service="broker", extra_tags={"bot": bot})
+    raise
 
 dbconn = None
 def get_db():
     global dbconn
-    if dbconn is None:
-        dbconn = db_pool.getconn()
-    return dbconn
+    try:
+        if dbconn is None:
+            dbconn = db_pool.getconn()
+        return dbconn
+    except Exception as e:
+        handle_ex(e, "get_db", service="broker", extra_tags={"bot": bot})
+        raise
+
+def close_db():
+    global dbconn
+    try:
+        if dbconn is not None:
+            db_pool.putconn(dbconn)
+            dbconn = None
+    except Exception as e:
+        handle_ex(e, "close_db", service="broker", extra_tags={"bot": bot})
+        raise
+
+def get_broker():
+    try:
+        broker_type = config[bot]['broker']
+        if broker_type == 'ibkr':
+            return broker_ibkr(config, bot)
+        elif broker_type == 'alpaca':
+            return broker_alpaca(config, bot)
+        else:
+            raise Exception(f"Unknown broker type: {broker_type}")
+    except Exception as e:
+        handle_ex(e, "get_broker", service="broker", extra_tags={"bot": bot})
+        raise
+
+def get_position_size(symbol):
+    try:
+        broker = get_broker()
+        return broker.get_position_size(symbol)
+    except Exception as e:
+        handle_ex(e, f"get_position_size_{symbol}", service="broker", extra_tags={"bot": bot})
+        return 0
+
+def get_net_liquidity():
+    try:
+        broker = get_broker()
+        return broker.get_net_liquidity()
+    except Exception as e:
+        handle_ex(e, "get_net_liquidity", service="broker", extra_tags={"bot": bot})
+        return 0
+
+def get_price(symbol):
+    try:
+        broker = get_broker()
+        return broker.get_price(symbol)
+    except Exception as e:
+        handle_ex(e, f"get_price_{symbol}", service="broker", extra_tags={"bot": bot})
+        return 0
+
+async def set_position_size(symbol, amount):
+    try:
+        broker = get_broker()
+        return await broker.set_position_size(symbol, amount)
+    except Exception as e:
+        handle_ex(e, f"set_position_size_{symbol}", service="broker", extra_tags={"bot": bot, "amount": amount})
+        return None
+
+async def is_trade_completed(trade):
+    try:
+        if not trade:
+            return True
+        broker = get_broker()
+        return await broker.is_trade_completed(trade)
+    except Exception as e:
+        handle_ex(e, "check_trade_completion", service="broker", extra_tags={"bot": bot})
+        return False
+
+def health_check():
+    try:
+        broker = get_broker()
+        broker.health_check_prices()
+        broker.health_check_positions()
+    except Exception as e:
+        handle_ex(e, "health_check", service="broker", extra_tags={"bot": bot})
+        raise
 
 def update_signal(id, data_dict):
     db = get_db()
@@ -57,25 +138,6 @@ def update_signal(id, data_dict):
     cursor = db.cursor()
     cursor.execute(sql, tuple(data_dict.values()) + (id,))
     db.commit()
-
-
-
-def handle_ex(e, context="unknown"):
-    # Track error metric
-    tags = [
-        'service:broker',
-        'error_context:' + context
-    ]
-    statsd.increment('broker.errors', tags=tags)
-    
-    # Send detailed event
-    error_text = str(e) if isinstance(e, str) else traceback.format_exc()
-    Event.create(
-        title='Broker Error',
-        text=f'Context: {context}\n\nError:\n{error_text}',
-        alert_type='error',
-        tags=tags
-    )
 
 # connect to Redis and subscribe to tradingview messages
 r = redis.Redis(host='localhost', port=6379, db=0)

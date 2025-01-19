@@ -1,7 +1,7 @@
 import configparser
 from datadog import initialize, statsd
 from datadog.api import Event
-import traceback
+from core_error import handle_ex
 
 class broker_root:
     def __init__(self, bot, account):
@@ -22,32 +22,29 @@ class broker_root:
             raise
 
     def get_account_config(self, account):
-        account_config = self.config[account]
-        if 'group' in account_config:
-            group = account_config['group']
-            group_config = self.config[group]
-            # Merge group config into account config, account config takes precedence
-            merged_config = {**group_config, **account_config}
-            return merged_config
-        return account_config
+        try:
+            account_config = self.config[account]
+            if 'group' in account_config:
+                group = account_config['group']
+                group_config = self.config[group]
+                # Merge group config into account config, account config takes precedence
+                merged_config = {**group_config, **account_config}
+                return merged_config
+            return account_config
+        except Exception as e:
+            self.handle_ex(e, "get_account_config")
+            raise
 
     def handle_ex(self, e, context="unknown"):
-        # Track error metric
-        tags = [
-            f'service:broker',
-            f'bot:{self.bot}',
-            f'account:{self.account}',
-            f'error_context:{context}'
-        ]
-        statsd.increment('broker.errors', tags=tags)
-        
-        # Send detailed event
-        error_text = str(e) if isinstance(e, str) else traceback.format_exc()
-        Event.create(
-            title=f'Broker Error: {self.bot}/{self.account}',
-            text=f'Context: {context}\n\nError:\n{error_text}',
-            alert_type='error',
-            tags=tags
+        """Wrapper around core error handler with broker-specific tags"""
+        return handle_ex(
+            e,
+            context=context,
+            service="broker",
+            extra_tags=[
+                f'bot:{self.bot}',
+                f'account:{self.account}'
+            ]
         )
 
     def track_trade(self, symbol, action, amount, success=True):
