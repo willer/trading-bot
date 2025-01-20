@@ -1,4 +1,5 @@
 import time
+import traceback
 import psycopg2
 from psycopg2 import pool
 import redis, json
