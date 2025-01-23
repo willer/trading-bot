@@ -19,22 +19,22 @@ ticker_cache = {}
 # declare a class to represent the IB driver
 class broker_ibkr(broker_root):
     def __init__(self, bot, account):
-        super().__init__(bot, account)  # Call parent init first
+        self.config = configparser.ConfigParser()
+        self.config.read('config.ini')
+        self.bot = bot
+        self.account = account
+        self.aconfig = self.get_account_config(account)
         self.conn = None
         
         # Initialize connection at startup
         try:
             print(f"IB: Initializing connection for account {account}...")
             self.load_conn()
-            connected = self.check_connection()
-            self.track_connection(connected)
-            if connected:
+            if self.check_connection():
                 print(f"IB: Successfully initialized connection for account {account}")
             else:
                 print(f"IB: Failed to establish initial connection for account {account}")
-                self.handle_ex("Failed to establish initial connection", context="connection")
         except Exception as e:
-            self.handle_ex(e, context="initialization")
             print(f"IB: Error during initial connection for account {account}: {str(e)}")
 
     def load_conn(self):
@@ -88,13 +88,11 @@ class broker_ibkr(broker_root):
                         raise
 
     def check_connection(self):
-        try:
-            is_connected = self.conn and self.conn.isConnected()
-            self.track_connection(is_connected)
-            return is_connected
-        except Exception as e:
-            self.handle_ex(e, context="check_connection")
-            return False
+        """Check if the connection is alive and reconnect if needed"""
+        if self.conn is None or not self.conn.isConnected():
+            print("IB: Connection lost or not established, attempting to reconnect...")
+            self.load_conn()
+        return self.conn.isConnected()
 
     def get_stock(self, symbol, forhistory=False):
         if not self.check_connection():
@@ -272,34 +270,30 @@ class broker_ibkr(broker_root):
         return stock
 
     def get_price(self, symbol):
-        try:
-            stock = self.get_stock(symbol)
-            if not stock:
-                self.handle_ex(f"Unable to get stock info for {symbol}", "get_price")
-                return 0
+        if not self.check_connection():
+            raise Exception("Unable to establish connection to Interactive Brokers")
+        self.load_conn()
+        stock = self.get_stock(symbol)
 
-            if not self.check_connection():
-                self.handle_ex("Unable to establish connection to Interactive Brokers", "get_price")
-                return 0
+        # keep a cache of tickers to avoid repeated calls to IB, but only for 15s
+        # (IBKR is giving us 11s delays for some reason)
+        if symbol in ticker_cache and time.time() - ticker_cache[symbol]['time'] < 15:
+            ticker = ticker_cache[symbol]['ticker']
+        else:
+            starttimer = time.time()
+            [ticker] = self.conn.reqTickers(stock)
+            print(f"  get_price({symbol}) cache miss, took {time.time() - starttimer:.2f}s")
+            ticker_cache[symbol] = {'ticker': ticker, 'time': time.time()}
 
-            ticker = self.conn.reqMktData(stock)
-            try:
-                timeout = 10  # seconds
-                end_time = time.time() + timeout
-                while not ticker.marketPrice() and time.time() < end_time:
-                    self.conn.sleep(0.1)
-                
-                price = ticker.marketPrice()
-                if not price:
-                    self.handle_ex(f"Unable to get price for {symbol}", "get_price")
-                    return 0
-                
-                return price
-            finally:
-                self.conn.cancelMktData(stock)
-        except Exception as e:
-            self.handle_ex(e, f"get_price_{symbol}")
-            return 0
+        if math.isnan(ticker.last):
+            if math.isnan(ticker.close):
+                raise Exception(f"error trying to retrieve stock price for {symbol}, last={ticker.last}, close={ticker.close}")
+            else:
+                price = ticker.close
+        else:
+            price = ticker.last
+        print(f"  get_price({symbol}) -> {price}")
+        return price
 
     # example: get_price_opt('SPY', datetime.date.today, 280, 'P', '20191016')
     def get_price_opt(self, symbol, expiry, strike, put_call):
@@ -325,70 +319,76 @@ class broker_ibkr(broker_root):
         return price
 
     def get_net_liquidity(self):
-        try:
-            if not self.check_connection():
-                self.handle_ex("Unable to establish connection to Interactive Brokers", "get_net_liquidity")
-                return 0
+        self.load_conn()
+        # get the current net liquidity
+        net_liquidity = 0
+        accountSummary = self.conn.accountSummary(self.account)
+        for value in accountSummary:
+            if value.tag == 'NetLiquidation':
+                net_liquidity = float(value.value)
+                break
 
-            account_value = self.conn.accountSummary(self.account)
-            for av in account_value:
-                if av.tag == 'NetLiquidation':
-                    return float(av.value)
-            return 0
-        except Exception as e:
-            self.handle_ex(e, "get_net_liquidity")
-            return 0
+        print(f"  get_net_liquidity() -> {net_liquidity}")
+
+        return net_liquidity
 
     def get_position_size(self, symbol):
-        try:
-            stock = self.get_stock(symbol)
-            if not stock:
-                self.handle_ex(f"Unable to get stock info for {symbol}", "get_position_size")
-                return 0
+        self.load_conn()
+        # get the current position size
+        stock = self.get_stock(symbol)
+        psize = 0
+        for p in self.conn.positions(self.account):
+            if p.contract.symbol == stock.symbol:
+                psize = int(p.position)
 
-            if not self.check_connection():
-                self.handle_ex("Unable to establish connection to Interactive Brokers", "get_position_size")
-                return 0
-
-            positions = self.conn.positions()
-            for position in positions:
-                if position.contract.symbol == symbol:
-                    return position.position
-            return 0
-        except Exception as e:
-            self.handle_ex(e, f"get_position_size_{symbol}")
-            return 0
+        print(f"  get_position_size({symbol}) -> {psize}")
+        return psize
 
     async def set_position_size(self, symbol, amount):
-        try:
-            stock = self.get_stock(symbol)
-            if not stock:
-                self.handle_ex(f"Unable to get stock info for {symbol}", "set_position_size")
-                return None
+        print(f"set_position_size({self.account},{symbol},{amount})")
+        if False:
+            print(f"  SKIPPING")
+            return
 
-            if not self.check_connection():
-                self.handle_ex("Unable to establish connection to Interactive Brokers", "set_position_size")
-                return None
+        self.load_conn()
+        stock = self.get_stock(symbol)
 
-            current = self.get_position_size(symbol)
-            if current == amount:
-                return None
+        # get the current position size
+        position_size = self.get_position_size(symbol)
 
-            order = MarketOrder('BUY' if amount > current else 'SELL', abs(amount - current))
+        # figure out how much to buy or sell
+        position_variation = round(amount - position_size, 0)
+
+        # if we need to buy or sell, do it with a limit order
+        if position_variation != 0:
+
+            if stock.market_order:
+                if position_variation > 0:
+                    order = MarketOrder('BUY', position_variation)
+                else:
+                    order = MarketOrder('SELL', abs(position_variation))
+
+            else:
+                price = self.get_price(symbol)
+                high_limit_price = self.x_round(price * 1.008, stock.round_precision)
+                low_limit_price  = self.x_round(price * 0.992, stock.round_precision)
+
+                if position_variation > 0:
+                    order = LimitOrder('BUY', position_variation, high_limit_price)
+                else:
+                    order = LimitOrder('SELL', abs(position_variation), low_limit_price)
+
+            order.outsideRth = True
+            order.account = self.account
+
+            print("  placing order: ", order)
             trade = self.conn.placeOrder(stock, order)
-            return trade
-        except Exception as e:
-            self.handle_ex(e, f"set_position_size_{symbol}")
-            return None
+            print("    trade: ", trade)
+
+            return trade  # Return the order ID
 
     async def is_trade_completed(self, trade):
-        try:
-            if not trade:
-                return True
-            return trade.orderStatus.status in ['Filled', 'Cancelled', 'Inactive']
-        except Exception as e:
-            self.handle_ex(e, "check_trade_completion")
-            return False
+        return trade.orderStatus.status in ['Filled', 'Cancelled', 'ApiCancelled']
 
     def download_data(self, symbol, end, duration, barlength, cachedata=False):
         print(f"download_data({symbol},{end},{duration},{barlength})")
@@ -465,20 +465,17 @@ class broker_ibkr(broker_root):
 
 
     def health_check_prices(self):
-        try:
-            self.get_price('TQQQ')
-        except Exception as e:
-            self.handle_ex(e, "health_check_prices")
-            raise
+        #self.get_price('SOXL')
+        #self.get_price('SOXS')
+        #self.get_price('TQQQ')
+        #self.get_price('SQQQ')
+        self.get_price('NQ1!')
+        self.get_price('MNQ1!')
 
     def health_check_positions(self):
-        try:
-            if not self.check_connection():
-                raise Exception("Unable to establish connection to Interactive Brokers")
-            positions = self.conn.positions()
-        except Exception as e:
-            self.handle_ex(e, "health_check_positions")
-            raise
+        self.get_net_liquidity()
+        self.get_position_size('SOXL')
+        self.get_position_size('SOXS')
 
     async def set_bracket(self, symbol):
         print(f"set_bracket({self.account},{symbol})")
