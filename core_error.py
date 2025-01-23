@@ -54,7 +54,7 @@ def handle_ex(e, context="unknown", service="unknown", extra_tags=None):
         print(f"Failed to send metric: {metric_e}")
     
     # Get error details
-    error_text = str(e) if isinstance(e, str) else traceback.format_exc()
+    error_text = str(e) if isinstance(e, str) else f"{e}\n{traceback.format_exc()}"
     
     # Create event title based on service
     title = f'{service.title()} Error'
