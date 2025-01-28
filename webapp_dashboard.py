@@ -67,27 +67,26 @@ def order():
     return render_template('action_response.html', message="Orders submitted and logged!", redirect_url=url_for('dashboard'))
 
 def process_order(direction, ticker):
-    position_size = 1000000
+    # Convert direction to position percentage
+    position_pct = 100  # Default to 100% for long/short
     if direction == "flat":
-        position_size = 0
-    # special case for futures, for now
-    if direction != "flat":
-        if ticker in ["NQ1!", "ES1!", "GC1!"]:
-            position_size = 1
+        position_pct = 0
+    elif direction == "short":
+        position_pct = -100
 
     # Message to send to the broker
     broker_message = {
         "ticker": ticker.upper(),
         "strategy": {
-            "bot": "human",  # Send 'live' to the broker
+            "bot": "human",
             "market_position": direction,
-            "market_position_size": position_size,
+            "position_pct": position_pct,
             "order_message": json.dumps({
                 "ticker": ticker.upper(),
                 "strategy": {
                     "bot": "human",
                     "market_position": direction,
-                    "market_position_size": position_size
+                    "position_pct": position_pct
                 }
             })
         }

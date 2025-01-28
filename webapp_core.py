@@ -232,8 +232,49 @@ def process_signal_retries():
         handle_ex(e, context="process_retries", service="webapp", extra_tags=['component:core'])
         raise
 
+def convert_to_position_pct_signal(data_dict):
+    """Convert a TradingView signal to a position percentage signal"""
+    signal = data_dict.copy()
+    strategy = signal['strategy']
+    
+    # Default to full position (100%) for standard entries
+    position_pct = 100
+    
+    # Handle take-profit signals based on order comment
+    if 'order_comment' in strategy:
+        comment = strategy['order_comment']
+        if comment == 'L1TPShort' or comment == 'L1TPLong':
+            position_pct = 20  # TP1 = 20% of position
+        elif comment == 'L2TPShort' or comment == 'L2TPLong':
+            position_pct = 1   # TP2 = 1% of position
+        # Handle explicit position size percentages in comment (e.g. "GoShort Stable 1% ")
+        elif '%' in comment:
+            try:
+                # Extract the number before the % sign
+                pct_str = comment.split('%')[0].split()[-1]
+                position_pct = float(pct_str)
+            except (ValueError, IndexError):
+                # If we can't parse the percentage, use default
+                pass
+    
+    # If going flat, set to 0%
+    if strategy.get('market_position') == 'flat':
+        position_pct = 0
+        
+    # Make position percentage negative for shorts
+    if 'short' in strategy.get('market_position', '').lower():
+        position_pct = -position_pct
+        
+    # Create new signal format
+    signal['strategy']['position_pct'] = position_pct
+    
+    return signal
+
 def save_signal(data_dict):
     try:
+        # Convert signal to position percentage format
+        data_dict = convert_to_position_pct_signal(data_dict)
+        
         app.logger.info(f"Received signal: {json.dumps(data_dict, default=str)}")
         
         # Set retry time to 3 seconds from now
@@ -244,8 +285,8 @@ def save_signal(data_dict):
         cursor.execute("""
             INSERT INTO signals 
             (ticker, bot, order_action, order_contracts, market_position, 
-             market_position_size, order_price, order_message) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+             market_position_size, order_price, order_message, position_pct) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (data_dict['ticker'],
               data_dict['strategy'].get('bot', ''),
@@ -254,7 +295,8 @@ def save_signal(data_dict):
               data_dict['strategy'].get('market_position', ''),
               data_dict['strategy'].get('market_position_size', ''),
               data_dict['strategy'].get('order_price', ''),
-              json.dumps(data_dict)))
+              json.dumps(data_dict),
+              data_dict['strategy'].get('position_pct')))
         db.commit()
         id = cursor.fetchone()[0]
         app.logger.info(f"Signal recorded with ID: {id}")
