@@ -197,16 +197,32 @@ async def check_messages():
                 # Reset position_pct for each account to the original signal value
                 position_pct = signal_position_pct
 
-                # check for futures permissions (default is allow)
-                order_stock = driver.get_stock(order_symbol)
-                if order_stock.is_futures and aconfig.get('use-futures', 'no') == 'no':
-                    print("this account doesn't allow futures; skipping")
-                    continue
+                # Get the max configured percentage for this security and scale the signal
+                if f"{order_symbol_lower}-pct" in aconfig:
+                    max_pct = float(aconfig[f"{order_symbol_lower}-pct"])
+                else:
+                    max_pct = float(aconfig.get("default-pct", "100"))
+                
+                # Scale the position percentage by the max allowed percentage
+                scaled_pct = position_pct * (max_pct / 100.0)
+                print(f"Scaling position from {position_pct}% to {scaled_pct}% based on config max of {max_pct}%")
+                position_pct = scaled_pct
 
-                order_price = driver.get_price(order_symbol)
-                if order_price == 0:
-                    print("*** PRICE IS 0, SKIPPING")
-                    continue
+                # check for security conversion (generally futures to ETF), but only if futures are allowed
+                if order_symbol_lower in aconfig and aconfig.get('use-futures', 'no') == 'yes':
+                    print("switching from ", order_symbol_orig, " to ", aconfig[order_symbol_lower])
+                    [switchmult, x, order_symbol] = aconfig[order_symbol_lower].split()
+                    switchmult = float(switchmult)
+                    position_pct = position_pct * switchmult
+                    order_stock = driver.get_stock(order_symbol)
+                    order_price = driver.get_price(order_symbol)
+
+                # check if the resulting order is for futures and if they're allowed
+                if order_stock.is_futures and aconfig.get('use-futures', 'no') == 'no':
+                    print("this account doesn't allow futures; skipping to inverse ETF logic")
+                    order_symbol = order_symbol_orig  # Reset to original symbol
+                    order_stock = driver.get_stock(order_symbol)  # Reset to original stock
+                    order_price = driver.get_price(order_symbol)  # Reset to original price
 
                 # if this account needs different ETF's for short vs long, close the other side
                 # or both if we're going flat
@@ -223,26 +239,6 @@ async def check_messages():
                     if position_pct == 0:
                         print("Position closed via inverse ETF logic")
                         continue
-
-                # Get the max configured percentage for this security and scale the signal
-                if f"{order_symbol_lower}-pct" in aconfig:
-                    max_pct = float(aconfig[f"{order_symbol_lower}-pct"])
-                else:
-                    max_pct = float(aconfig.get("default-pct", "100"))
-                
-                # Scale the position percentage by the max allowed percentage
-                scaled_pct = position_pct * (max_pct / 100.0)
-                print(f"Scaling position from {position_pct}% to {scaled_pct}% based on config max of {max_pct}%")
-                position_pct = scaled_pct
-
-                # check for security conversion (generally futures to ETF)
-                if order_symbol_lower in aconfig:
-                    print("switching from ", order_symbol_orig, " to ", aconfig[order_symbol_lower])
-                    [switchmult, x, order_symbol] = aconfig[order_symbol_lower].split()
-                    switchmult = float(switchmult)
-                    position_pct = position_pct * switchmult
-                    order_stock = driver.get_stock(order_symbol)
-                    order_price = driver.get_price(order_symbol)
 
                 # check for overall multipliers on the account
                 if not order_stock.is_futures and aconfig.get("multiplier", "") != "":
@@ -264,7 +260,10 @@ async def check_messages():
 
                 # Calculate desired position size based on net liquidity and position percentage
                 net_liquidity = driver.get_net_liquidity()
-                desired_position = round((net_liquidity * (position_pct/100.0)) / order_price)
+                raw_position = (net_liquidity * (position_pct/100.0)) / order_price
+                desired_position = round(raw_position)
+                
+                print(f"Position calculation: {net_liquidity} * {position_pct}% / {order_price} = {raw_position} -> {desired_position}")
                 
                 current_position = driver.get_position_size(order_symbol)
 
