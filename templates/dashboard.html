@@ -74,6 +74,7 @@
                         <th>Bot</th>
                         <th>Ticker</th>
                         <th>Mkt Pos</th>
+                        <th>Pos %</th>
                         <th>Mkt Pos Size</th>
                         <th>Price at that Time</th>
                         <th>Processed (sec)</th>
@@ -88,6 +89,7 @@
                         <td>{{ signal.bot }}</td>
                         <td>{{ signal.ticker }}</td>
                         <td>{{ signal.market_position or "" }}</td>
+                        <td>{{ "%.1f"|format(signal.position_pct|float) if signal.position_pct else "" }}</td>
                         <td>{{ signal.market_position_size or "" }}</td>
                         <td>{{ "%.2f"|format(signal.order_price|float) if (signal.order_price|float) > 0 else "" }}</td>
                         <td><nobr>{{ "%.2f"|format((signal.processed - signal.timestamp).total_seconds()/60) if signal.processed else "" }}</nobr></td>

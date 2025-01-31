@@ -68,11 +68,18 @@ def order():
 
 def process_order(direction, ticker):
     # Convert direction to position percentage
-    position_pct = 100  # Default to 100% for long/short
     if direction == "flat":
         position_pct = 0
+    elif direction == "long":
+        position_pct = 100
     elif direction == "short":
         position_pct = -100
+    elif direction == "halflong":
+        position_pct = 50
+    elif direction == "halfshort":
+        position_pct = -50
+    else:
+        position_pct = 0  # Default to flat for unknown directions
 
     # Message to send to the broker
     broker_message = {

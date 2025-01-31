@@ -168,7 +168,6 @@ async def check_messages():
 
             if 'bot' not in data_dict['strategy']:
                 raise Exception("You need to indicate the bot in the strategy portion of the json payload")
-                return
             # special case: a manual trade is treated like a live trade
             if data_dict['strategy']['bot'].strip() == 'human':
                 data_dict['strategy']['bot'] = bot
@@ -176,12 +175,16 @@ async def check_messages():
                 print("signal intended for different bot '",data_dict['strategy']['bot'],"', skipping")
                 return
 
+            if 'ticker' not in data_dict:
+                raise Exception("No ticker found in signal data")
+
             config.read('config.ini')
 
             ## extract data from TV payload received via webhook
             order_symbol_orig = data_dict['ticker']                             # ticker for which TV order was sent
+            order_symbol = order_symbol_orig  # Initialize order_symbol with original ticker
             order_symbol_lower = order_symbol_orig.lower()                      # config variables coming from aconfig are lowercase
-            position_pct = data_dict['strategy'].get('position_pct', 0)        # desired position percentage (-100 to 100)
+            signal_position_pct = data_dict['strategy'].get('position_pct', 0)  # desired position percentage (-100 to 100)
             signal_id = data_dict['strategy'].get('id', None)
 
             trades = []
@@ -190,6 +193,9 @@ async def check_messages():
 
                 aconfig = get_account_config(account)
                 driver = drivers[account]
+
+                # Reset position_pct for each account to the original signal value
+                position_pct = signal_position_pct
 
                 # check for futures permissions (default is allow)
                 order_stock = driver.get_stock(order_symbol)
@@ -218,16 +224,16 @@ async def check_messages():
                         print("Position closed via inverse ETF logic")
                         continue
 
-                # check for security specific percentage of net liquidity in config
-                if position_pct != 0:
-                    if f"{order_symbol_lower}-pct" in aconfig:
-                        max_pct = float(aconfig[f"{order_symbol_lower}-pct"])
-                    else:
-                        max_pct = float(aconfig.get("default-pct", "100"))
-                    
-                    # Scale the position percentage by the max allowed percentage
-                    position_pct = position_pct * (max_pct / 100.0)
-                    print(f"Scaling position to {position_pct}% based on config max of {max_pct}%")
+                # Get the max configured percentage for this security and scale the signal
+                if f"{order_symbol_lower}-pct" in aconfig:
+                    max_pct = float(aconfig[f"{order_symbol_lower}-pct"])
+                else:
+                    max_pct = float(aconfig.get("default-pct", "100"))
+                
+                # Scale the position percentage by the max allowed percentage
+                scaled_pct = position_pct * (max_pct / 100.0)
+                print(f"Scaling position from {position_pct}% to {scaled_pct}% based on config max of {max_pct}%")
+                position_pct = scaled_pct
 
                 # check for security conversion (generally futures to ETF)
                 if order_symbol_lower in aconfig:
