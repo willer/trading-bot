@@ -194,13 +194,18 @@ async def check_messages():
                 aconfig = get_account_config(account)
                 driver = drivers[account]
 
+                # Initialize order_stock and price with original symbol first
+                order_stock = driver.get_stock(order_symbol)
+                order_price = driver.get_price(order_symbol)
+
                 # Get the max configured percentage for this security and scale the signal
                 if f"{order_symbol_lower}-pct" in aconfig:
                     config_value = aconfig[f"{order_symbol_lower}-pct"]
                     if ',' in config_value and aconfig.get('use-futures', 'no') == 'yes':
                         # Parse format like "1.5, NQ" into percentage and target symbol
                         pct_str, target_symbol = [x.strip() for x in config_value.split(',')]
-                        position_pct = float(pct_str) * (-1 if signal_position_pct < 0 else 1)  # Just preserve the sign
+                        # For flat positions, use 0. Otherwise preserve the sign from the signal
+                        position_pct = 0 if signal_position_pct == 0 else float(pct_str) * (-1 if signal_position_pct < 0 else 1)
                         order_symbol = target_symbol
                         order_stock = driver.get_stock(order_symbol)
                         order_price = driver.get_price(order_symbol)
