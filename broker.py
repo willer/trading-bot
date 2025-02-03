@@ -194,28 +194,26 @@ async def check_messages():
                 aconfig = get_account_config(account)
                 driver = drivers[account]
 
-                # Reset position_pct for each account to the original signal value
-                position_pct = signal_position_pct
-
                 # Get the max configured percentage for this security and scale the signal
                 if f"{order_symbol_lower}-pct" in aconfig:
-                    max_pct = float(aconfig[f"{order_symbol_lower}-pct"])
+                    config_value = aconfig[f"{order_symbol_lower}-pct"]
+                    if ',' in config_value and aconfig.get('use-futures', 'no') == 'yes':
+                        # Parse format like "1.5, NQ" into percentage and target symbol
+                        pct_str, target_symbol = [x.strip() for x in config_value.split(',')]
+                        position_pct = float(pct_str) * (-1 if signal_position_pct < 0 else 1)  # Just preserve the sign
+                        order_symbol = target_symbol
+                        order_stock = driver.get_stock(order_symbol)
+                        order_price = driver.get_price(order_symbol)
+                    else:
+                        max_pct = float(config_value.split(',')[0])
+                        # Scale the position percentage by the max allowed percentage
+                        position_pct = signal_position_pct * (max_pct / 100.0)
                 else:
                     max_pct = float(aconfig.get("default-pct", "100"))
+                    # Scale the position percentage by the max allowed percentage
+                    position_pct = signal_position_pct * (max_pct / 100.0)
                 
-                # Scale the position percentage by the max allowed percentage
-                scaled_pct = position_pct * (max_pct / 100.0)
-                print(f"Scaling position from {position_pct}% to {scaled_pct}% based on config max of {max_pct}%")
-                position_pct = scaled_pct
-
-                # check for security conversion (generally futures to ETF), but only if futures are allowed
-                if order_symbol_lower in aconfig and aconfig.get('use-futures', 'no') == 'yes':
-                    print("switching from ", order_symbol_orig, " to ", aconfig[order_symbol_lower])
-                    [switchmult, x, order_symbol] = aconfig[order_symbol_lower].split()
-                    switchmult = float(switchmult)
-                    position_pct = position_pct * switchmult
-                    order_stock = driver.get_stock(order_symbol)
-                    order_price = driver.get_price(order_symbol)
+                print(f"Using position size of {position_pct}% for {order_symbol}")
 
                 # check if the resulting order is for futures and if they're allowed
                 if order_stock.is_futures and aconfig.get('use-futures', 'no') == 'no':
@@ -260,10 +258,16 @@ async def check_messages():
 
                 # Calculate desired position size based on net liquidity and position percentage
                 net_liquidity = driver.get_net_liquidity()
-                raw_position = (net_liquidity * (position_pct/100.0)) / order_price
+                
+                # For micro futures, adjust the price to be 1/10th
+                effective_price = order_price
+                if order_stock.is_futures and order_symbol.startswith('M'):
+                    effective_price = order_price / 10
+                
+                raw_position = (net_liquidity * (position_pct/100.0)) / effective_price
                 desired_position = round(raw_position)
                 
-                print(f"Position calculation: {net_liquidity} * {position_pct}% / {order_price} = {raw_position} -> {desired_position}")
+                print(f"Position calculation: {net_liquidity} * {position_pct}% / {effective_price} = {raw_position} -> {desired_position}")
                 
                 current_position = driver.get_position_size(order_symbol)
 
