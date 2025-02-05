@@ -114,16 +114,47 @@ def update_signal(id, data_dict):
 
 def should_skip_flat_signal(data_dict):
     """
-    Check if this flat signal should be skipped due to recent directional signals
+    Check if this flat signal should be skipped. Cases to skip:
+    1. Recent directional signal within 2 minutes
+    2. Recent opposite directional signal (transition case) within 3 seconds
     Returns (should_skip, reason)
     """
     try:
         if data_dict['strategy'].get('market_position', '') != 'flat':
             return False, None
             
-        # Look for recent non-flat signals for this symbol and bot
+        # Get the previous position from the flat signal
+        prev_position = data_dict['strategy'].get('prev_market_position', '')
+        
         db = get_db()
         cursor = db.cursor()
+        
+        # First check: Look for any recent directional signal that's opposite to prev_position
+        # This catches transition cases (long->short or short->long) where broker handles the flat
+        if prev_position in ['long', 'short']:
+            opposite_position = 'short' if prev_position == 'long' else 'long'
+            cursor.execute("""
+                SELECT * FROM signals 
+                WHERE ticker = %s 
+                AND bot = %s 
+                AND market_position = %s
+                AND timestamp > %s - INTERVAL '3 seconds'
+                AND timestamp <= %s
+                ORDER BY timestamp DESC
+                LIMIT 1
+            """, (
+                data_dict['ticker'], 
+                data_dict['strategy'].get('bot', ''),
+                opposite_position,
+                data_dict['strategy'].get('timestamp', datetime.datetime.now()),
+                data_dict['strategy'].get('timestamp', datetime.datetime.now())
+            ))
+            
+            transition_signal = cursor.fetchone()
+            if transition_signal:
+                return True, f"Skipping flat signal - found {opposite_position} transition signal"
+        
+        # Second check: Look for any recent non-flat signals (original check)
         cursor.execute("""
             SELECT * FROM signals 
             WHERE ticker = %s 
@@ -282,6 +313,28 @@ def save_signal(data_dict):
         
         db = get_db()
         cursor = db.cursor()
+
+        # If this is a directional signal, check for and invalidate recent flat signals
+        if data_dict['strategy'].get('market_position') in ['long', 'short']:
+            cursor.execute("""
+                WITH recent_flat AS (
+                    SELECT id FROM signals 
+                    WHERE ticker = %s 
+                    AND bot = %s 
+                    AND market_position = 'flat'
+                    AND timestamp > NOW() - INTERVAL '3 seconds'
+                )
+                UPDATE signal_retries 
+                SET retries_remaining = 0
+                WHERE original_signal_id IN (SELECT id FROM recent_flat)
+                AND retry_time > NOW()
+            """, (
+                data_dict['ticker'],
+                data_dict['strategy'].get('bot', '')
+            ))
+            db.commit()
+            app.logger.info(f"Invalidated any recent flat signals for {data_dict['ticker']}")
+        
         cursor.execute("""
             INSERT INTO signals 
             (ticker, bot, order_action, order_contracts, market_position, 
