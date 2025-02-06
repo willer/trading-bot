@@ -194,6 +194,10 @@ async def check_messages():
                 aconfig = get_account_config(account)
                 driver = drivers[account]
 
+                # Reset order symbol and position percentage for each account
+                order_symbol = order_symbol_orig
+                position_pct = signal_position_pct
+
                 # Initialize order_stock and price with original symbol first
                 order_stock = driver.get_stock(order_symbol)
                 order_price = driver.get_price(order_symbol)
