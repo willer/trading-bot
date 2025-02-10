@@ -160,11 +160,15 @@ def setup_trades_for_account(account, signal_order_symbol, signal_position_pct, 
         if position_pct >= 0:
             short_symbol = config['inverse-etfs'].get(order_symbol)
             if short_symbol is not None:
-                print(f"sending order to close short position of {short_symbol}")
-                closing_trades.append((driver, short_symbol, 0))
+                current_short = driver.get_position_size(short_symbol)
+                if current_short != 0:
+                    print(f"sending order to close short position of {short_symbol} (current: {current_short})")
+                    closing_trades.append((driver, short_symbol, 0))
         if position_pct <= 0:
-            print(f"sending order to close long position of {order_symbol}")
-            closing_trades.append((driver, order_symbol, 0))
+            current_long = driver.get_position_size(order_symbol)
+            if current_long != 0:
+                print(f"sending order to close long position of {order_symbol} (current: {current_long})")
+                closing_trades.append((driver, order_symbol, 0))
 
         # If we're going flat (position_pct = 0), we've already closed everything
         # so we can skip to the next account
