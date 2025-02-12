@@ -308,14 +308,15 @@ def save_signal(data_dict):
         
         app.logger.info(f"Received signal: {json.dumps(data_dict, default=str)}")
         
-        # Set retry time to 3 seconds from now
-        retry_time = datetime.datetime.now() + timedelta(seconds=3)
+        # Set retry time - immediate for directional signals, delayed for flat
+        is_directional = data_dict['strategy'].get('market_position') in ['long', 'short']
+        retry_time = datetime.datetime.now() if is_directional else datetime.datetime.now() + timedelta(seconds=3)
         
         db = get_db()
         cursor = db.cursor()
 
         # If this is a directional signal, check for and invalidate recent flat signals
-        if data_dict['strategy'].get('market_position') in ['long', 'short']:
+        if is_directional:
             cursor.execute("""
                 WITH recent_flat AS (
                     SELECT id FROM signals 
@@ -357,7 +358,7 @@ def save_signal(data_dict):
         # Add the signal ID to the data
         data_dict['strategy']['id'] = id
         
-        # Schedule for processing
+        # Schedule for processing - directional signals get 1 retry, flat signals also get 1 retry
         cursor.execute("""
             INSERT INTO signal_retries 
             (original_signal_id, retry_time, signal_data, retries_remaining)
