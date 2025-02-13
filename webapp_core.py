@@ -116,7 +116,7 @@ def should_skip_flat_signal(data_dict):
     """
     Check if this flat signal should be skipped. Cases to skip:
     1. Recent directional signal within 2 minutes
-    2. Recent opposite directional signal (transition case) within 3 seconds
+    2. Recent opposite directional signal (transition case) within 15 seconds
     Returns (should_skip, reason)
     """
     try:
@@ -138,7 +138,7 @@ def should_skip_flat_signal(data_dict):
                 WHERE ticker = %s 
                 AND bot = %s 
                 AND market_position = %s
-                AND timestamp > %s - INTERVAL '3 seconds'
+                AND timestamp > %s - INTERVAL '15 seconds'
                 AND timestamp <= %s
                 ORDER BY timestamp DESC
                 LIMIT 1
@@ -310,7 +310,7 @@ def save_signal(data_dict):
         
         # Set retry time - immediate for directional signals, delayed for flat
         is_directional = data_dict['strategy'].get('market_position') in ['long', 'short']
-        retry_time = datetime.datetime.now() if is_directional else datetime.datetime.now() + timedelta(seconds=3)
+        retry_time = datetime.datetime.now() if is_directional else datetime.datetime.now() + timedelta(seconds=15)
         
         db = get_db()
         cursor = db.cursor()
@@ -323,7 +323,7 @@ def save_signal(data_dict):
                     WHERE ticker = %s 
                     AND bot = %s 
                     AND market_position = 'flat'
-                    AND timestamp > NOW() - INTERVAL '3 seconds'
+                    AND timestamp > NOW() - INTERVAL '15 seconds'
                 )
                 UPDATE signal_retries 
                 SET retries_remaining = 0
