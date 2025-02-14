@@ -296,11 +296,27 @@ async def check_messages():
             order_symbol_lower = order_symbol_orig.lower()                      # config variables coming from aconfig are lowercase
             signal_position_pct = data_dict['strategy'].get('position_pct', 0)  # desired position percentage (-100 to 100)
             signal_id = data_dict['strategy'].get('id', None)
+            is_retry = data_dict.get('is_retry', False)  # Check if this is a retry signal
 
             closing_trades = []
             opening_trades = []
             for account in accounts:
                 closing_trades, opening_trades = setup_trades_for_account(account, order_symbol, signal_position_pct, closing_trades, opening_trades)
+
+            # For retry signals, filter out trades where position difference is <= 5%
+            if is_retry and len(opening_trades) > 0:
+                filtered_trades = []
+                for driver, symbol, target_pos in opening_trades:
+                    current_pos = driver.get_position_size(symbol)
+                    if target_pos == 0:
+                        pct_diff = 100 if current_pos != 0 else 0
+                    else:
+                        pct_diff = abs((current_pos - target_pos) / target_pos * 100)
+                    if pct_diff > 5:
+                        filtered_trades.append((driver, symbol, target_pos))
+                    else:
+                        print(f"Skipping retry trade - position difference {pct_diff:.1f}% <= 5%")
+                opening_trades = filtered_trades
 
             if len(closing_trades) > 0:
                 print("executing closing trades")

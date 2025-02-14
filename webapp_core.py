@@ -308,9 +308,10 @@ def save_signal(data_dict):
         
         app.logger.info(f"Received signal: {json.dumps(data_dict, default=str)}")
         
-        # Set retry time - immediate for directional signals, delayed for flat
+        # Set retry times
         is_directional = data_dict['strategy'].get('market_position') in ['long', 'short']
-        retry_time = datetime.datetime.now() if is_directional else datetime.datetime.now() + timedelta(seconds=15)
+        initial_retry_time = datetime.datetime.now() if is_directional else datetime.datetime.now() + timedelta(seconds=15)
+        verification_retry_time = datetime.datetime.now() + timedelta(minutes=1)
         
         db = get_db()
         cursor = db.cursor()
@@ -358,14 +359,24 @@ def save_signal(data_dict):
         # Add the signal ID to the data
         data_dict['strategy']['id'] = id
         
-        # Schedule for processing - directional signals get 1 retry, flat signals also get 1 retry
+        # Schedule initial execution
         cursor.execute("""
             INSERT INTO signal_retries 
             (original_signal_id, retry_time, signal_data, retries_remaining)
             VALUES (%s, %s, %s, %s)
-        """, (id, retry_time, json.dumps(data_dict), 1))
+        """, (id, initial_retry_time, json.dumps(data_dict), 1))
+        
+        # Schedule verification retry
+        verification_data = data_dict.copy()
+        verification_data['is_retry'] = True
+        cursor.execute("""
+            INSERT INTO signal_retries 
+            (original_signal_id, retry_time, signal_data, retries_remaining)
+            VALUES (%s, %s, %s, %s)
+        """, (id, verification_retry_time, json.dumps(verification_data), 1))
+        
         db.commit()
-        app.logger.info(f"Signal scheduled for processing at {retry_time}")
+        app.logger.info(f"Signal scheduled for initial processing at {initial_retry_time} and verification at {verification_retry_time}")
 
     except Exception as e:
         handle_ex(e, context="save_signal", service="webapp", extra_tags=['component:core'])
