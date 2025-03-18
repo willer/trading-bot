@@ -74,10 +74,18 @@ def index():
 @app.post("/webhook")
 def webhook():
     try:
+        # Check if request has the correct content type
+        if not request.is_json:
+            # Non-JSON request - this is expected sometimes, just return OK
+            app.logger.info("Received non-JSON request to webhook endpoint")
+            return "ok", 200
+            
         # Get the JSON data from the request
         data = request.get_json()
         if not data:
-            raise ValueError("No JSON data received")
+            # Empty JSON is still an issue worth noting
+            app.logger.warning("Received empty JSON data")
+            return "No data received", 400
 
         # Save the signal and process it
         save_signal(data)

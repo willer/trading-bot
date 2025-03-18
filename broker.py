@@ -59,7 +59,7 @@ def update_signal(id, data_dict):
 
 
 def handle_ex(e, context="unknown"):
-    core_error.handle_ex(e, "broker", context)
+    core_error.handle_ex(e, context=context, service="broker")
 
 
 # connect to Redis and subscribe to tradingview messages
@@ -74,28 +74,36 @@ accounts = accountlist.split(",")
 
 print("Waiting for webhook messages...")
 async def execute_trades(trades):
-    tasks = [driver.set_position_size(symbol, amount) for driver, symbol, amount in trades]
-    order_ids = await asyncio.gather(*tasks)
-    return list(zip([driver for driver, _, _ in trades], order_ids))
+    try:
+        tasks = [driver.set_position_size(symbol, amount) for driver, symbol, amount in trades]
+        order_ids = await asyncio.gather(*tasks)
+        return list(zip([driver for driver, _, _ in trades], order_ids))
+    except Exception as e:
+        handle_ex(e, context="trade_execution_error")
+        raise
 
 async def wait_for_trades(drivers_and_orders, signal_id, timeout=30):
-    start_time = time.time()
-    while time.time() - start_time < timeout:
-        incomplete_trades = []
-        for driver, order_id in drivers_and_orders:
-            if not await driver.is_trade_completed(order_id):
-                incomplete_trades.append((driver, order_id))
+    try:
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            incomplete_trades = []
+            for driver, order_id in drivers_and_orders:
+                if not await driver.is_trade_completed(order_id):
+                    incomplete_trades.append((driver, order_id))
+            
+            if not incomplete_trades:
+                if signal_id:
+                    update_signal(signal_id, {'processed': datetime.datetime.now().isoformat()})
+                print(f"All trades for signal {signal_id} completed")
+                return True  # All trades completed
+            
+            drivers_and_orders = incomplete_trades
+            await asyncio.sleep(1)
         
-        if not incomplete_trades:
-            if signal_id:
-                update_signal(signal_id, {'processed': datetime.datetime.now().isoformat()})
-            print(f"All trades for signal {signal_id} completed")
-            return True  # All trades completed
-        
-        drivers_and_orders = incomplete_trades
-        await asyncio.sleep(1)
-    
-    return False  # Timeout reached, some trades incomplete
+        return False  # Timeout reached, some trades incomplete
+    except Exception as e:
+        handle_ex(e, context="trade_monitoring_error")
+        raise
 
 def get_account_config(account):
     config.read('config.ini')
@@ -205,6 +213,12 @@ def setup_trades_for_account(account, signal_order_symbol, signal_position_pct, 
     raw_position = (net_liquidity * (position_pct/100.0)) / effective_price
     desired_position = round(raw_position)
     
+    # Safety check: limit position size to a reasonable percentage of account
+    max_reasonable_position = net_liquidity * 0.95 / effective_price  # 95% max of account
+    if abs(desired_position) > max_reasonable_position:
+        print(f"WARNING: Calculated position {desired_position} exceeds 95% of account value, limiting to {round(max_reasonable_position)}")
+        desired_position = round(max_reasonable_position) if desired_position > 0 else -round(max_reasonable_position)
+    
     print(f"Position calculation: {net_liquidity} * {position_pct}% / {effective_price} = {raw_position} -> {desired_position}")
     
     current_position = driver.get_position_size(order_symbol)
@@ -295,6 +309,12 @@ async def check_messages():
             order_symbol = order_symbol_orig  # Initialize order_symbol with original ticker
             order_symbol_lower = order_symbol_orig.lower()                      # config variables coming from aconfig are lowercase
             signal_position_pct = data_dict['strategy'].get('position_pct', 0)  # desired position percentage (-100 to 100)
+            
+            # Safety check to validate position_pct is within reasonable bounds
+            if abs(signal_position_pct) > 100:
+                print(f"WARNING: Position percentage {signal_position_pct}% exceeds 100%, capping at ±100%")
+                signal_position_pct = 100 if signal_position_pct > 0 else -100
+                
             signal_id = data_dict['strategy'].get('id', None)
             is_retry = data_dict.get('is_retry', False)  # Check if this is a retry signal
 
@@ -314,7 +334,7 @@ async def check_messages():
                         pct_diff = abs((current_pos - target_pos) / target_pos * 100)
                     if pct_diff > 5:
                         filtered_trades.append((driver, symbol, target_pos))
-                    else:
+                else:
                         print(f"Skipping retry trade - position difference {pct_diff:.1f}% <= 5%")
                 opening_trades = filtered_trades
 
@@ -327,7 +347,7 @@ async def check_messages():
                     incomplete_accounts = [account for (driver, _), account in zip(drivers_and_orders, accounts) if not await driver.is_trade_completed(_)]
                     error_msg = f"ORDER FAILED: Timeout reached for accounts: {', '.join(incomplete_accounts)}"
                     print(error_msg)
-                    handle_ex(error_msg)
+                    handle_ex(error_msg, context="trade_closing_timeout")
                 else:
                     print("All closing trades filled successfully")
 
@@ -341,12 +361,12 @@ async def check_messages():
                     incomplete_accounts = [account for (driver, _), account in zip(drivers_and_orders, accounts) if not await driver.is_trade_completed(_)]
                     error_msg = f"ORDER FAILED: Timeout reached for accounts: {', '.join(incomplete_accounts)}"
                     print(error_msg)
-                    handle_ex(error_msg)
+                    handle_ex(error_msg, context="trade_opening_timeout")
                 else:
                     print("All opening trades filled successfully")
 
         except Exception as e:
-            handle_ex(e)
+            handle_ex(e, context="trade_execution_error")
             raise
 
 runcount = 1

@@ -213,27 +213,65 @@ def process_signal_retries():
         """)
         
         retries = cursor.fetchall()
+        
+        # Group retries by ticker and bot to find the most recent for each
+        ticker_bot_retries = {}
         for retry in retries:
+            retry_id, signal_data, retries_left, original_signal_id, retry_time = retry
+            
+            # Parse signal data
+            signal_dict = json.loads(signal_data) if isinstance(signal_data, str) else signal_data
+            
+            ticker = signal_dict.get('ticker', '')
+            bot = signal_dict['strategy'].get('bot', '')
+            key = f"{ticker}_{bot}"
+            
+            # Get the original signal's timestamp from the database
+            cursor.execute("SELECT timestamp FROM signals WHERE id = %s", (original_signal_id,))
+            result = cursor.fetchone()
+            if not result:
+                continue
+                
+            original_timestamp = result[0]
+            
+            # Store each retry with its original signal timestamp
+            if key not in ticker_bot_retries or original_timestamp > ticker_bot_retries[key]['timestamp']:
+                ticker_bot_retries[key] = {
+                    'retry': retry,
+                    'timestamp': original_timestamp,
+                    'signal_dict': signal_dict
+                }
+        
+        # Process only the most recent signal retry for each ticker/bot combination
+        for key, data in ticker_bot_retries.items():
+            retry = data['retry']
+            signal_dict = data['signal_dict']
+            retry_id, signal_data, retries_left, original_signal_id, retry_time = retry
+            
             try:
-                retry_id, signal_data, retries_left, original_signal_id, retry_time = retry
-                
-                # Parse signal data
-                signal_dict = json.loads(signal_data) if isinstance(signal_data, str) else signal_data
-                
-                # Skip if this is a flat signal and there's a directional signal within 3 seconds
+                # Skip if this is a flat signal and there's a directional signal within 10 seconds
+                # Use the original signal timestamp, not the retry time
                 if signal_dict['strategy'].get('market_position', '') == 'flat':
+                    # Get original timestamp of this signal
+                    cursor.execute("SELECT timestamp FROM signals WHERE id = %s", (original_signal_id,))
+                    original_timestamp_result = cursor.fetchone()
+                    if not original_timestamp_result:
+                        continue
+                    
+                    original_timestamp = original_timestamp_result[0]
+                    
                     cursor.execute("""
                         SELECT * FROM signals 
                         WHERE ticker = %s 
                         AND bot = %s 
                         AND market_position IN ('long', 'short')
-                        AND timestamp BETWEEN %s - INTERVAL '3 seconds' AND %s + INTERVAL '3 seconds'
+                        AND timestamp BETWEEN %s - INTERVAL '10 seconds' AND %s + INTERVAL '10 seconds'
                         LIMIT 1
                     """, (
                         signal_dict['ticker'], 
                         signal_dict['strategy'].get('bot', ''),
-                        retry_time,
-                        retry_time
+                        original_timestamp,
+                        original_timestamp
                     ))
                     
                     if cursor.fetchone():
@@ -242,17 +280,33 @@ def process_signal_retries():
                         db.commit()
                         continue
                 
+                # Add a log to show we're processing the most recent signal for this ticker/bot
+                app.logger.info(f"Processing most recent signal retry for {signal_dict['ticker']}/{signal_dict['strategy'].get('bot', '')}")
+                
                 # Publish the signal
                 signal_dict['is_retry'] = True
                 app.logger.info(f"Publishing signal: {json.dumps(signal_dict, default=str)}")
                 r.publish('tradingview', json.dumps(signal_dict))
                 
-                # Update retry count
+                # Update retry count for this signal
                 cursor.execute("""
                     UPDATE signal_retries 
                     SET retries_remaining = retries_remaining - 1
                     WHERE id = %s
                 """, (retry_id,))
+                
+                # Mark ALL older signal retries for this ticker/bot as completed (0 retries)
+                cursor.execute("""
+                    UPDATE signal_retries sr
+                    SET retries_remaining = 0
+                    FROM signals s
+                    WHERE sr.original_signal_id = s.id
+                    AND s.ticker = %s
+                    AND s.bot = %s
+                    AND s.timestamp < %s
+                    AND sr.retries_remaining > 0
+                    AND sr.id != %s
+                """, (signal_dict['ticker'], signal_dict['strategy'].get('bot', ''), data['timestamp'], retry_id))
                 
             except Exception as e:
                 handle_ex(e, context=f"process_retry_{retry_id}", service="webapp", extra_tags=['component:core'])
@@ -267,6 +321,11 @@ def convert_to_position_pct_signal(data_dict):
     """Convert a TradingView signal to a position percentage signal"""
     signal = data_dict.copy()
     strategy = signal['strategy']
+    
+    # If the signal already has a position_pct defined, respect that value
+    if 'position_pct' in strategy:
+        # The signal already has a position percentage, so just return it as is
+        return signal
     
     # Default to full position (100%) for standard entries
     position_pct = 100
@@ -337,6 +396,23 @@ def save_signal(data_dict):
             db.commit()
             app.logger.info(f"Invalidated any recent flat signals for {data_dict['ticker']}")
         
+        # Cancel all pending verification retries for this ticker/bot combination
+        # This ensures that if we get multiple signals in quick succession, only the most recent one will be verified
+        cursor.execute("""
+            UPDATE signal_retries sr
+            SET retries_remaining = 0
+            FROM signals s
+            WHERE sr.original_signal_id = s.id
+            AND s.ticker = %s
+            AND s.bot = %s
+            AND sr.retry_time > NOW()
+        """, (
+            data_dict['ticker'],
+            data_dict['strategy'].get('bot', '')
+        ))
+        db.commit()
+        app.logger.info(f"Cancelled any existing retry signals for {data_dict['ticker']}")
+        
         cursor.execute("""
             INSERT INTO signals 
             (ticker, bot, order_action, order_contracts, market_position, 
@@ -382,6 +458,4 @@ def save_signal(data_dict):
         handle_ex(e, context="save_signal", service="webapp", extra_tags=['component:core'])
         db.rollback()
         raise
-
-
 

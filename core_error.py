@@ -5,6 +5,14 @@ from datadog.api import Event
 import logging
 import urllib3
 
+# For SMS notifications
+try:
+    from textmagic.rest import TextmagicRestClient
+    TEXTMAGIC_AVAILABLE = True
+except ImportError:
+    TEXTMAGIC_AVAILABLE = False
+    print("TextMagic library not found. SMS notifications will be disabled.")
+
 # Suppress SSL connection noise
 logging.getLogger('urllib3.connectionpool').setLevel(logging.WARNING)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -17,6 +25,18 @@ config.read('config.ini')
 dd_api_key = config['DEFAULT'].get('datadog-api-key', '')
 dd_app_key = config['DEFAULT'].get('datadog-app-key', '')
 print(f"Initializing Datadog with API key: {dd_api_key[:8]}... App key: {dd_app_key[:8]}...")
+
+# TextMagic configuration
+textmagic_username = config['DEFAULT'].get('textmagic-username', '')
+textmagic_token = config['DEFAULT'].get('textmagic-token', '')
+textmagic_phone = config['DEFAULT'].get('textmagic-phone', '')
+textmagic_enabled = (TEXTMAGIC_AVAILABLE and textmagic_username and textmagic_token and textmagic_phone)
+
+if textmagic_enabled:
+    print(f"TextMagic SMS notifications enabled for {textmagic_phone}")
+    textmagic_client = TextmagicRestClient(textmagic_username, textmagic_token)
+else:
+    print("TextMagic SMS notifications disabled (missing credentials or library)")
 
 options = {
     'api_key': dd_api_key,
@@ -76,5 +96,24 @@ def handle_ex(e, context="unknown", service="unknown", extra_tags=None):
     except Exception as event_e:
         print(f"Failed to send event: {event_e}")
     
+    # Send SMS notification if TextMagic is enabled
+    if 'textmagic_enabled' in globals():
+        # Only send SMS for trade-related failures or critical errors
+        is_trade_error = (
+            'ORDER FAILED' in str(e) or 
+            context.startswith('trade_') or 
+            (service == 'broker' and ('timeout' in str(e).lower() or 'failed' in str(e).lower()))
+        )
+        
+        if is_trade_error:
+            try:
+                sms_message = f"{title}: {context} - {str(e)[:100]}"
+                textmagic_client.messages.create(phones=textmagic_phone, text=sms_message)
+                print(f"SMS notification sent to {textmagic_phone}")
+            except Exception as sms_e:
+                print(f"Failed to send SMS: {sms_e}")
+        else:
+            print(f"SMS notification skipped - not a trade-related error")
+    
     print(f"Error in {context}: {error_text}")  # Console logging
-    return error_text  # Return for optional use by caller 
+    return error_text  # Return for optional use by caller
