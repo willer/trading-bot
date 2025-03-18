@@ -1,5 +1,5 @@
-# tradingview-interactive-brokers
-TradingView Integration to Interactive Brokers or Alpaca using Webhooks
+# auto-trade-bot
+Trading bot that takes TradingView or other algo signals via webhook, and places those trades on Interactive Brokers or Alpaca.
 
 ## Demo Video:
 
