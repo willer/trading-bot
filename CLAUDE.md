@@ -32,6 +32,19 @@
 - Mocking for database, Redis, and external services
 - Fixed issue with flat signals not being properly deduplicated when immediately following a directional signal
 
+## File Overview
+- **broker.py**: Main broker process that listens for trade signals via Redis and executes trades
+- **broker_root.py**: Abstract base class defining broker interface 
+- **broker_ibkr.py**: Interactive Brokers implementation for trade execution
+- **broker_alpaca.py**: Alpaca Markets implementation for trade execution
+- **webapp.py**: Flask web application that receives webhook signals and publishes to Redis
+- **webapp_core.py**: Core functionality for webapp including signal processing
+- **webapp_dashboard.py**: Dashboard view for the web interface
+- **webapp_reports.py**: Reporting functionality for the web interface
+- **webapp_stocks.py**: Stock information display functionality
+- **core_error.py**: Centralized error handling including Datadog integration
+
 ## Recent Important Fixes
+- March 25, 2025: Fixed position percentage scaling in broker.py to properly scale signal percentages by configured percentages for futures trading.
 - March 5, 2025: Fixed signal deduplication in webapp_core.py to use original signal timestamp (not processing time) and expanded window from 3 to 10 seconds to properly skip flat signals after a directional change.
 - March 5, 2025: Added comprehensive test coverage for webapp signal processing and broker trade execution.

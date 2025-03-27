@@ -97,12 +97,20 @@ def handle_ex(e, context="unknown", service="unknown", extra_tags=None):
         print(f"Failed to send event: {event_e}")
     
     # Send SMS notification if TextMagic is enabled
-    if 'textmagic_enabled' in globals():
-        # Only send SMS for trade-related failures or critical errors
+    if textmagic_enabled and 'textmagic_client' in globals():
+        # Only send SMS for critical trade execution failures
+        error_str = str(e).lower()
+        
+        # Filter out connection errors and only send SMS for actual trading errors
         is_trade_error = (
-            'ORDER FAILED' in str(e) or 
-            context.startswith('trade_') or 
-            (service == 'broker' and ('timeout' in str(e).lower() or 'failed' in str(e).lower()))
+            service == 'broker' and
+            context.startswith('trade_') and 
+            'ORDER FAILED' in str(e) and 
+            'connect' not in error_str and
+            ('order rejected' in error_str or 
+             'insufficient buying power' in error_str or
+             'position limit exceeded' in error_str or
+             'margin requirement' in error_str)
         )
         
         if is_trade_error:
@@ -113,7 +121,7 @@ def handle_ex(e, context="unknown", service="unknown", extra_tags=None):
             except Exception as sms_e:
                 print(f"Failed to send SMS: {sms_e}")
         else:
-            print(f"SMS notification skipped - not a trade-related error")
+            print(f"SMS notification skipped - not a critical trade error")
     
     print(f"Error in {context}: {error_text}")  # Console logging
     return error_text  # Return for optional use by caller

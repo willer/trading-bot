@@ -56,17 +56,22 @@ def order():
     if not is_logged_in():
         return redirect(url_for('login'))
     if is_dangerous_time():
-        params = f"{request.form.get('direction')},{request.form.get('ticker')}"
+        params = f"{request.form.get('direction')},{request.form.get('ticker')},{request.form.get('position_size', '')}"
         return redirect(url_for('confirm_action', action='order', params=params))
 
     direction = request.form.get("direction")
     ticker = request.form.get("ticker")
+    position_size = request.form.get("position_size")
+    
+    if not ticker:
+        return render_template('action_response.html', message="Error: No ticker specified", redirect_url=url_for('dashboard'))
+        
     tickers = ticker.split(';')
     for ticker in tickers:
-        process_order(direction, ticker)
+        process_order(direction, ticker, position_size)
     return render_template('action_response.html', message="Orders submitted and logged!", redirect_url=url_for('dashboard'))
 
-def process_order(direction, ticker):
+def process_order(direction, ticker, position_size=None):
     # Convert direction to position percentage
     if direction == "flat":
         position_pct = 0
@@ -80,6 +85,20 @@ def process_order(direction, ticker):
         position_pct = -50
     else:
         position_pct = 0  # Default to flat for unknown directions
+    
+    # Override the position percentage if position_size is provided
+    if position_size and position_size.strip():
+        try:
+            # Calculate the position percentage based on the custom size
+            position_size_float = float(position_size)
+            # Keep the sign (direction) but use the custom size
+            if position_pct != 0:
+                position_size_float = position_size_float * (1 if position_pct > 0 else -1)
+        except ValueError:
+            # If conversion fails, use the default position percentage
+            position_size_float = position_pct
+    else:
+        position_size_float = position_pct
 
     # Message to send to the broker
     broker_message = {
@@ -87,13 +106,13 @@ def process_order(direction, ticker):
         "strategy": {
             "bot": "human",
             "market_position": direction,
-            "position_pct": position_pct,
+            "position_pct": position_size_float,
             "order_message": json.dumps({
                 "ticker": ticker.upper(),
                 "strategy": {
                     "bot": "human",
                     "market_position": direction,
-                    "position_pct": position_pct
+                    "position_pct": position_size_float
                 }
             })
         }
@@ -112,10 +131,14 @@ def execute_action():
     if action == 'resend':
         return resend_action(params)
     elif action == 'order':
-        direction, ticker = params.split(',')
+        parts = params.split(',')
+        direction = parts[0]
+        ticker = parts[1]
+        position_size = parts[2] if len(parts) > 2 else None
+        
         tickers = ticker.split(';')
         for ticker in tickers:
-            process_order(direction, ticker)
+            process_order(direction, ticker, position_size)
         return render_template('action_response.html', message="Orders submitted and logged!", redirect_url=url_for('dashboard'))
     else:
         return render_template('action_response.html', message=f"Unknown action '{action}'", redirect_url=url_for('dashboard'))

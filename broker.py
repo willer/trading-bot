@@ -139,8 +139,8 @@ def setup_trades_for_account(account, signal_order_symbol, signal_position_pct, 
         if ',' in config_value and aconfig.get('use-futures', 'no') == 'yes':
             # Parse format like "1.5, NQ" into percentage and target symbol
             pct_str, target_symbol = [x.strip() for x in config_value.split(',')]
-            # For flat positions, use 0. Otherwise preserve the sign from the signal
-            position_pct = 0 if signal_position_pct == 0 else float(pct_str) * (-1 if signal_position_pct < 0 else 1)
+            # Scale the signal percentage by the configured percentage
+            position_pct = 0 if signal_position_pct == 0 else float(pct_str) * (signal_position_pct / 100.0)
             order_symbol = target_symbol
             order_stock = driver.get_stock(order_symbol)
             order_price = driver.get_price(order_symbol)

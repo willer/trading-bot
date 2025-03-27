@@ -42,6 +42,7 @@
                             <button type="button" data-ticker="SOXL" class="btn btn-outline-primary btn-sm">SOXL</button>
                             <button type="button" data-ticker="NVDA" class="btn btn-outline-primary btn-sm">NVDA</button>
                             <button type="button" data-ticker="MSFT" class="btn btn-outline-primary btn-sm">MSFT</button>
+                            <input type="text" class="form-control btn-sm btn-outline-primary custom-input" id="customTicker" placeholder="Custom ticker">
                         </div>
                     </div>
                     <div class="col-auto">
@@ -52,6 +53,7 @@
                             <button type="button" data-direction="bracket" class="btn btn-outline-secondary btn-sm">bracket</button>
                             <button type="button" data-direction="halfshort" class="btn btn-outline-danger btn-sm">half short</button>
                             <button type="button" data-direction="short" class="btn btn-outline-danger btn-sm">short</button>
+                            <input type="number" name="position_size" class="form-control btn-sm btn-outline-primary custom-input" id="positionSize" placeholder="Size (- for short)" min="" step="0.1">
                         </div>
                     </div>
                     <div class="col-12 mt-2">
@@ -96,7 +98,7 @@
                             <i class="fas fa-info-circle text-primary signal-info" 
                                data-bs-toggle="modal" 
                                data-bs-target="#jsonModal" 
-                               onclick='showJson({{ signal.order_message|safe }})' 
+                               onclick="showJson({{ signal.order_message|safe }})" 
                                role="button"></i>
                             {% endif %}
                         </td>
@@ -140,7 +142,7 @@
                             <i class="fas fa-info-circle text-primary signal-info" 
                                data-bs-toggle="modal" 
                                data-bs-target="#jsonModal" 
-                               onclick='showJson({{ signal.order_message|safe }})' 
+                               onclick="showJson({{ signal.order_message|safe }})" 
                                role="button"></i>
                             {% endif %}
                         </td>
@@ -174,6 +176,8 @@
             document.querySelectorAll('#tickerButtons button').forEach(btn => btn.classList.remove('active'));
             this.classList.add('active');
             document.getElementById('selectedTicker').value = this.dataset.ticker;
+            // Clear the custom ticker input when a button is clicked
+            document.getElementById('customTicker').value = '';
         });
     });
 
@@ -182,7 +186,83 @@
             document.querySelectorAll('#directionButtons button[data-direction]').forEach(btn => btn.classList.remove('active'));
             this.classList.add('active');
             document.getElementById('selectedDirection').value = this.dataset.direction;
+            
+            // Get the position size input value
+            const positionSize = document.getElementById('positionSize');
+            // Reset the position size field color depending on the selected direction
+            if (this.dataset.direction.includes('short')) {
+                positionSize.style.borderColor = '#dc3545'; // danger color for short
+                positionSize.style.color = '#dc3545';
+            } else if (this.dataset.direction.includes('long')) {
+                positionSize.style.borderColor = '#198754'; // success color for long
+                positionSize.style.color = '#198754';
+            } else {
+                positionSize.style.borderColor = '#6c757d'; // secondary color for flat/bracket
+                positionSize.style.color = '#6c757d';
+            }
         });
+    });
+    
+    // Add input handler for the position size to adjust its color based on positive/negative value
+    document.getElementById('positionSize').addEventListener('input', function() {
+        const value = parseFloat(this.value);
+        if (!isNaN(value)) {
+            if (value < 0) {
+                this.style.borderColor = '#dc3545'; // danger color for short
+                this.style.color = '#dc3545';
+                // Deselect any active direction button when entering a negative number
+                document.querySelectorAll('#directionButtons button[data-direction]').forEach(btn => btn.classList.remove('active'));
+                document.getElementById('selectedDirection').value = 'short';
+            } else if (value > 0) {
+                this.style.borderColor = '#198754'; // success color for long
+                this.style.color = '#198754';
+                // Deselect any active direction button when entering a positive number
+                document.querySelectorAll('#directionButtons button[data-direction]').forEach(btn => btn.classList.remove('active'));
+                document.getElementById('selectedDirection').value = 'long';
+            } else {
+                this.style.borderColor = '#6c757d'; // secondary color for zero
+                this.style.color = '#6c757d';
+                document.getElementById('selectedDirection').value = 'flat';
+            }
+        }
+    });
+    
+    document.getElementById('customTicker').addEventListener('input', function() {
+        if (this.value.trim()) {
+            // If custom ticker is entered, deselect any active ticker button
+            document.querySelectorAll('#tickerButtons button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('selectedTicker').value = this.value.trim().toUpperCase();
+        }
+    });
+
+    document.querySelector('form').addEventListener('submit', function(e) {
+        // If custom ticker has a value, use it; otherwise use the selected button value
+        const customTicker = document.getElementById('customTicker').value.trim();
+        if (customTicker) {
+            document.getElementById('selectedTicker').value = customTicker.toUpperCase();
+        }
+        
+        const ticker = document.getElementById('selectedTicker').value;
+        const direction = document.getElementById('selectedDirection').value;
+        const positionSize = document.getElementById('positionSize').value;
+        
+        if (!ticker) {
+            e.preventDefault();
+            alert('Please select a ticker or enter a custom one');
+            return;
+        }
+        
+        if (!direction) {
+            e.preventDefault();
+            alert('Please select a direction');
+            return;
+        }
+        
+        if (!positionSize || positionSize == 0) {
+            e.preventDefault();
+            alert('Please enter a non-zero position size');
+            return;
+        }
     });
 
     function showJson(jsonData) {
@@ -207,6 +287,35 @@
     }
     .modal-lg {
         max-width: 800px;
+    }
+    /* Style custom inputs to look like buttons */
+    .custom-input {
+        width: 100%;
+        text-align: center;
+        border: 1px solid #0d6efd; /* Bootstrap primary color */
+        box-shadow: none;
+        border-radius: 0.25rem;
+        margin-top: 0.25rem;
+        height: calc(1.5em + 0.5rem + 2px); /* Match Bootstrap btn-sm height */
+    }
+    .custom-input:focus {
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25); /* Match Bootstrap btn focus */
+        border-color: #0d6efd;
+    }
+    #positionSize {
+        border-color: #6c757d; /* Default to secondary color */
+    }
+    #positionSize:focus {
+        box-shadow: 0 0 0 0.25rem rgba(108, 117, 125, 0.25); /* Match secondary color focus */
+    }
+    /* Visual cue for negative numbers */
+    input[type=number].negative {
+        color: #dc3545;
+        border-color: #dc3545;
+    }
+    input[type=number].positive {
+        color: #198754;
+        border-color: #198754;
     }
 </style>
 {% endblock %}
