@@ -87,13 +87,21 @@ def process_order(direction, ticker, position_size=None):
         position_pct = 0  # Default to flat for unknown directions
     
     # Override the position percentage if position_size is provided
-    if position_size and position_size.strip():
+    if position_size and str(position_size).strip():
         try:
-            # Calculate the position percentage based on the custom size
+            # Use the position size directly - the sign of the number already indicates direction
             position_size_float = float(position_size)
-            # Keep the sign (direction) but use the custom size
-            if position_pct != 0:
-                position_size_float = position_size_float * (1 if position_pct > 0 else -1)
+            
+            # If the user entered a negative number, set the direction to "short"
+            # If the user entered a positive number, set the direction to "long"
+            # This ensures consistency between the direction and position_pct
+            if position_size_float < 0:
+                direction = "short"
+            elif position_size_float > 0:
+                direction = "long"
+            else:
+                direction = "flat"
+            
         except ValueError:
             # If conversion fails, use the default position percentage
             position_size_float = position_pct

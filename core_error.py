@@ -98,22 +98,25 @@ def handle_ex(e, context="unknown", service="unknown", extra_tags=None):
     
     # Send SMS notification if TextMagic is enabled
     if textmagic_enabled and 'textmagic_client' in globals():
-        # Only send SMS for critical trade execution failures
+        # Only send SMS for critical trade execution failures or connection failures
         error_str = str(e).lower()
         
-        # Filter out connection errors and only send SMS for actual trading errors
-        is_trade_error = (
-            service == 'broker' and
-            context.startswith('trade_') and 
-            'ORDER FAILED' in str(e) and 
-            'connect' not in error_str and
-            ('order rejected' in error_str or 
-             'insufficient buying power' in error_str or
-             'position limit exceeded' in error_str or
-             'margin requirement' in error_str)
+        # Filter criteria for SMS notifications
+        is_critical_error = (
+            # Connection failures are critical
+            ('failed to connect' in error_str or 'connection' in error_str and 'attempt' in error_str) or
+            
+            # Traditional trade errors
+            (service == 'broker' and
+             context.startswith('trade_') and 
+             'ORDER FAILED' in str(e) and 
+             ('order rejected' in error_str or 
+              'insufficient buying power' in error_str or
+              'position limit exceeded' in error_str or
+              'margin requirement' in error_str))
         )
         
-        if is_trade_error:
+        if is_critical_error:
             try:
                 sms_message = f"{title}: {context} - {str(e)[:100]}"
                 textmagic_client.messages.create(phones=textmagic_phone, text=sms_message)
