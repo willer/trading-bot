@@ -3,156 +3,156 @@
 {% block title %}Dashboard{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row mb-3">
-        <div class="col">
-            <h1 class="h2">Dashboard</h1>
-        </div>
+<div class="row mb-3">
+    <div class="col">
+        <h1 class="h2">Dashboard</h1>
     </div>
-    
-    <div class="row mb-3">
-        <div class="col-md-6 mb-3 mb-md-0">
-            <div class="mb-2">
-                Current Time: {{ date.now().strftime('%Y-%m-%d %H:%M:%S') }}
-            </div>
-            <div class="mb-2">
-                <a href="{{ url_for('reports') }}" class="btn btn-primary btn-sm mb-1">Reports</a>
-                <a href="/show-logs-broker?tail=500" class="btn btn-primary btn-sm mb-1">Backend Logs</a>
-            </div>
-            <div class="btn-group" role="group">
-                <form method="post" action="/start-backend" class="me-1">
-                    <input type="hidden" name="hash" value="all">
-                    <input type="submit" class="btn btn-success btn-sm" value="Start Backend">
-                </form>
-                <form method="post" action="/stop-backend">
-                    <input type="hidden" name="hash" value="all">
-                    <input type="submit" class="btn btn-danger btn-sm" value="Stop Backend">
-                </form>
-            </div>
-        </div>
-        <div class="col-md-6 d-flex justify-content-end">
-            <form method="post" action="/order" class="form-inline">
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-6 mb-3 mb-md-0">
+        <div class="btn-group" role="group">
+            <form method="post" action="/start-backend" class="me-1">
                 <input type="hidden" name="hash" value="all">
-                <input type="hidden" name="ticker" id="selectedTicker">
-                <input type="hidden" name="direction" id="selectedDirection">
-                <div class="row g-2">
-                    <div class="col-auto">
-                        <div class="btn-group-vertical" id="tickerButtons">
-                            <button type="button" data-ticker="TQQQ" class="btn btn-outline-primary btn-sm">TQQQ</button>
-                            <button type="button" data-ticker="SOXL" class="btn btn-outline-primary btn-sm">SOXL</button>
-                            <button type="button" data-ticker="NVDA" class="btn btn-outline-primary btn-sm">NVDA</button>
-                            <button type="button" data-ticker="MSFT" class="btn btn-outline-primary btn-sm">MSFT</button>
-                            <button type="button" data-ticker="AAPL" class="btn btn-outline-primary btn-sm">AAPL</button>
-                            <input type="text" class="form-control btn-sm btn-outline-primary custom-input" id="customTicker" placeholder="Custom ticker">
-                        </div>
-                    </div>
-                    <div class="col-auto">
-                        <div class="btn-group-vertical" id="directionButtons">
-                            <button type="button" data-direction="long" class="btn btn-outline-success btn-sm">long</button>
-                            <button type="button" data-direction="halflong" class="btn btn-outline-success btn-sm">half long</button>
-                            <button type="button" data-direction="flat" class="btn btn-outline-secondary btn-sm">flat</button>
-                            <button type="button" data-direction="bracket" class="btn btn-outline-secondary btn-sm">bracket</button>
-                            <button type="button" data-direction="halfshort" class="btn btn-outline-danger btn-sm">half short</button>
-                            <button type="button" data-direction="short" class="btn btn-outline-danger btn-sm">short</button>
-                            <input type="number" name="position_size" class="form-control btn-sm btn-outline-primary custom-input" id="positionSize" placeholder="Size (- for short)" min="" step="0.1">
-                        </div>
-                    </div>
-                    <div class="col-12 mt-2">
-                        <button type="submit" class="btn btn-primary btn-sm w-40">Submit Order</button>
-                    </div>
-                </div>
+                <input type="submit" class="btn btn-success btn-sm" value="Start Backend">
+            </form>
+            <form method="post" action="/stop-backend">
+                <input type="hidden" name="hash" value="all">
+                <input type="submit" class="btn btn-danger btn-sm" value="Stop Backend">
             </form>
         </div>
     </div>
-    
-    <div class="row mb-3">
-        <div class="col">
-            <h2>Live Signals</h2>
-            <table class="table table-striped">
-                <thead class="thead-dark">
-                    <tr>
-                        <th>Timestamp</th>
-                        <th>Bot</th>
-                        <th>Ticker</th>
-                        <th>Mkt Pos</th>
-                        <th>Pos %</th>
-                        <th>Mkt Pos Size</th>
-                        <th>Price at that Time</th>
-                        <th>Processed (sec)</th>
-                        <th>Info</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for signal in signals %}
-                    {% if signal.bot == 'live' or signal.bot == 'human' %}
-                    <tr class="{{ 'table-success' if 'long' in signal.market_position else 'table-danger' if 'short' in signal.market_position else '' }} !important">
-                        <td><nobr>{{ signal.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</nobr></td>
-                        <td>{{ signal.bot }}</td>
-                        <td>{{ signal.ticker }}</td>
-                        <td>{{ signal.market_position or "" }}</td>
-                        <td>{{ "%.1f"|format(signal.position_pct|float) if signal.position_pct else "" }}</td>
-                        <td>{{ signal.market_position_size or "" }}</td>
-                        <td>{{ "%.2f"|format(signal.order_price|float) if (signal.order_price|float) > 0 else "" }}</td>
-                        <td><nobr>{{ "%.2f"|format((signal.processed - signal.timestamp).total_seconds()/60) if signal.processed else "" }}</nobr></td>
-                        <td>
-                            {% if signal.order_message %}
-                            <i class="fas fa-info-circle text-primary signal-info" 
-                               data-bs-toggle="modal" 
-                               data-bs-target="#jsonModal" 
-                               onclick="showJson({{ signal.order_message|safe }})" 
-                               role="button"></i>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endif %}
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+    <div class="col-md-6 d-flex justify-content-end">
+        <form method="post" action="/order" class="form-inline">
+            <input type="hidden" name="hash" value="all">
+            <input type="hidden" name="ticker" id="selectedTicker">
+            <input type="hidden" name="direction" id="selectedDirection">
+            <div class="row g-2">
+                <div class="col-auto">
+                    <div class="btn-group-vertical" id="tickerButtons">
+                        <button type="button" data-ticker="TQQQ" class="btn btn-outline-primary btn-sm">TQQQ</button>
+                        <button type="button" data-ticker="UPRO" class="btn btn-outline-primary btn-sm">UPRO</button>
+                        <button type="button" data-ticker="SOXL" class="btn btn-outline-primary btn-sm">SOXL</button>
+                        <button type="button" data-ticker="NVDA" class="btn btn-outline-primary btn-sm">NVDA</button>
+                        <button type="button" data-ticker="MSFT" class="btn btn-outline-primary btn-sm">MSFT</button>
+                        <button type="button" data-ticker="AAPL" class="btn btn-outline-primary btn-sm">AAPL</button>
+                        <input type="text" class="form-control btn-sm btn-outline-primary custom-input" id="customTicker" placeholder="Custom ticker">
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <div class="btn-group-vertical" id="directionButtons">
+                        <button type="button" data-direction="long" class="btn btn-outline-success btn-sm">long</button>
+                        <button type="button" data-direction="halflong" class="btn btn-outline-success btn-sm">half long</button>
+                        <button type="button" data-direction="flat" class="btn btn-outline-secondary btn-sm">flat</button>
+                        <button type="button" data-direction="bracket" class="btn btn-outline-secondary btn-sm">bracket</button>
+                        <button type="button" data-direction="halfshort" class="btn btn-outline-danger btn-sm">half short</button>
+                        <button type="button" data-direction="short" class="btn btn-outline-danger btn-sm">short</button>
+                        <input type="number" name="position_size" class="form-control btn-sm btn-outline-primary custom-input" id="positionSize" placeholder="Size (- for short)" min="" step="0.1">
+                    </div>
+                </div>
+                <div class="col-12 mt-2">
+                    <button type="submit" class="btn btn-primary btn-sm w-40">Submit Order</button>
+                </div>
+            </div>
+        </form>
     </div>
+</div>
 
-    <div class="row mt-5">
-        <div class="col">
-            <h2>Test Signals</h2>
-            <table class="table table-striped">
-                <thead class="thead-dark">
-                    <tr>
-                        <th>Timestamp</th>
-                        <th>Bot</th>
-                        <th>Ticker</th>
-                        <th>Mkt Pos</th>
-                        <th>Mkt Pos Size</th>
-                        <th>Price at that Time</th>
-                        <th>Processed (sec)</th>
-                        <th>Info</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for signal in signals %}
-                    {% if signal.bot != 'live' and signal.bot != 'human' %}
-                    <tr>
-                        <td><nobr>{{ signal.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</nobr></td>
-                        <td>{{ signal.bot }}</td>
-                        <td>{{ signal.ticker }}</td>
-                        <td>{{ signal.market_position or "" }}</td>
-                        <td>{{ signal.market_position_size or "" }}</td>
-                        <td>{{ "%.2f"|format(signal.order_price|float) if (signal.order_price|float) > 0 else "" }}</td>
-                        <td><nobr>{{ "%.2f"|format((signal.processed - signal.timestamp).total_seconds()/60) if signal.processed else "" }}</nobr></td>
-                        <td>
-                            {% if signal.order_message %}
-                            <i class="fas fa-info-circle text-primary signal-info" 
-                               data-bs-toggle="modal" 
-                               data-bs-target="#jsonModal" 
-                               onclick="showJson({{ signal.order_message|safe }})" 
-                               role="button"></i>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endif %}
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+<div class="row mb-3">
+    <div class="col">
+        <h2>Live Signals</h2>
+        <table class="table table-striped">
+            <thead class="thead-dark">
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Bot</th>
+                    <th>Ticker</th>
+                    <th>Mkt Pos</th>
+                    <th>Pos %</th>
+                    <th>Mkt Pos Size</th>
+                    <th>Price at that Time</th>
+                    <th>Processed (sec)</th>
+                    <th>Info</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for signal in signals %}
+                {% if signal.bot == 'live' or signal.bot == 'human' %}
+                <tr class="{{ 'table-success' if 'long' in signal.market_position else 'table-danger' if 'short' in signal.market_position else '' }} !important">
+                    <td><nobr>{{ signal.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</nobr></td>
+                    <td>{{ signal.bot }}</td>
+                    <td>{{ signal.ticker }}</td>
+                    <td>{{ signal.market_position or "" }}</td>
+                    <td>{{ "%.1f"|format(signal.position_pct|float) if signal.position_pct else "" }}</td>
+                    <td>{{ signal.market_position_size or "" }}</td>
+                    <td>{{ "%.2f"|format(signal.order_price|float) if (signal.order_price|float) > 0 else "" }}</td>
+                    <td><nobr>{{ "%.2f"|format((signal.processed - signal.timestamp).total_seconds()/60) if signal.processed else "" }}</nobr></td>
+                    <td>
+                        {% if signal.order_message %}
+                        <i class="fas fa-info-circle text-primary signal-info" 
+                           data-bs-toggle="modal" 
+                           data-bs-target="#jsonModal" 
+                           data-json="{{ signal.order_message|tojson|e }}"
+                           data-raw="{{ signal.order_message|e }}"
+                           title="Click to view signal details"
+                           role="button"></i>
+                        {% else %}
+                        <span class="text-muted" title="No signal data available">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="row mt-5">
+    <div class="col">
+        <h2>Test Signals</h2>
+        <table class="table table-striped">
+            <thead class="thead-dark">
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Bot</th>
+                    <th>Ticker</th>
+                    <th>Mkt Pos</th>
+                    <th>Mkt Pos Size</th>
+                    <th>Price at that Time</th>
+                    <th>Processed (sec)</th>
+                    <th>Info</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for signal in signals %}
+                {% if signal.bot != 'live' and signal.bot != 'human' %}
+                <tr>
+                    <td><nobr>{{ signal.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</nobr></td>
+                    <td>{{ signal.bot }}</td>
+                    <td>{{ signal.ticker }}</td>
+                    <td>{{ signal.market_position or "" }}</td>
+                    <td>{{ signal.market_position_size or "" }}</td>
+                    <td>{{ "%.2f"|format(signal.order_price|float) if (signal.order_price|float) > 0 else "" }}</td>
+                    <td><nobr>{{ "%.2f"|format((signal.processed - signal.timestamp).total_seconds()/60) if signal.processed else "" }}</nobr></td>
+                    <td>
+                        {% if signal.order_message %}
+                        <i class="fas fa-info-circle text-primary signal-info" 
+                           data-bs-toggle="modal" 
+                           data-bs-target="#jsonModal" 
+                           data-json="{{ signal.order_message|tojson|e }}"
+                           data-raw="{{ signal.order_message|e }}"
+                           title="Click to view signal details"
+                           role="button"></i>
+                        {% else %}
+                        <span class="text-muted" title="No signal data available">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
 
@@ -313,6 +313,40 @@
         const formatted = JSON.stringify(jsonData, null, 2);
         document.getElementById('jsonContent').textContent = formatted;
     }
+
+    // Add event listeners for signal info icons
+    document.querySelectorAll('.signal-info').forEach(icon => {
+        icon.addEventListener('click', function() {
+            console.log('Icon clicked');
+            console.log('data-json:', this.dataset.json);
+            console.log('data-raw:', this.dataset.raw);
+            
+            try {
+                if (!this.dataset.json) {
+                    console.error('No JSON data found in data-json attribute');
+                    if (this.dataset.raw) {
+                        console.log('Trying to parse raw data instead');
+                        const rawData = JSON.parse(this.dataset.raw);
+                        showJson(rawData);
+                        return;
+                    }
+                    document.getElementById('jsonContent').textContent = 'No signal data available';
+                    return;
+                }
+                const jsonData = JSON.parse(this.dataset.json);
+                console.log('Parsed data:', jsonData);
+                showJson(jsonData);
+            } catch (error) {
+                console.error('Error parsing JSON:', error);
+                console.log('Attempting to show raw data as fallback');
+                if (this.dataset.raw) {
+                    document.getElementById('jsonContent').textContent = this.dataset.raw;
+                } else {
+                    document.getElementById('jsonContent').textContent = 'Error parsing signal data: ' + error.message;
+                }
+            }
+        });
+    });
 </script>
 <style>
     .signal-info {

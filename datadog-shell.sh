@@ -6,9 +6,13 @@ DATADOG_API_KEY=$(grep "^datadog-api-key" config.ini | sed 's/.*= *//')
 DATADOG_APP_KEY=$(grep "^datadog-app-key" config.ini | sed 's/.*= *//')
 DATADOG_SITE="us5.datadoghq.com"
 
-if [ -z "$DATADOG_API_KEY" ]; then
-    echo "Error: datadog-api-key not found in config.ini"
-    exit 1
+# Check if Datadog is properly configured
+if [ -z "$DATADOG_API_KEY" ] || [ -z "$DATADOG_APP_KEY" ]; then
+    echo "Datadog monitoring disabled (missing API keys)"
+    DATADOG_ENABLED=false
+else
+    echo "Datadog monitoring enabled"
+    DATADOG_ENABLED=true
 fi
 
 #echo "Using Datadog API Key: ${DATADOG_API_KEY:0:5}..."
@@ -16,6 +20,11 @@ fi
 
 # Function to send event to Datadog
 dd_event() {
+    if [ "$DATADOG_ENABLED" = "false" ]; then
+        echo "Datadog disabled - skipping event: $1"
+        return
+    fi
+    
     title="$1"
     text="$2"
     alert_type="${3:-info}"  # Default to info if not specified
@@ -48,6 +57,11 @@ dd_event() {
 
 # Function to send metric to Datadog
 dd_metric() {
+    if [ "$DATADOG_ENABLED" = "false" ]; then
+        echo "Datadog disabled - skipping metric: $1 = $2"
+        return
+    fi
+    
     metric="$1"
     value="$2"
     tags="${3:-service:shell}"  # Default tags if not specified

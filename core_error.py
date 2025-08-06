@@ -1,7 +1,5 @@
 import configparser
 import traceback
-from datadog import initialize, statsd
-from datadog.api import Event
 import logging
 import urllib3
 
@@ -13,6 +11,15 @@ except ImportError:
     TEXTMAGIC_AVAILABLE = False
     print("TextMagic library not found. SMS notifications will be disabled.")
 
+# For Datadog monitoring
+try:
+    from datadog import initialize, statsd
+    from datadog.api import Event
+    DATADOG_AVAILABLE = True
+except ImportError:
+    DATADOG_AVAILABLE = False
+    print("Datadog library not found. Monitoring will be disabled.")
+
 # Suppress SSL connection noise
 logging.getLogger('urllib3.connectionpool').setLevel(logging.WARNING)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -21,15 +28,33 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 config = configparser.ConfigParser()
 config.read('config.ini')
 
-# Debug config reading
-dd_api_key = config['DEFAULT'].get('datadog-api-key', '')
-dd_app_key = config['DEFAULT'].get('datadog-app-key', '')
-print(f"Initializing Datadog with API key: {dd_api_key[:8]}... App key: {dd_app_key[:8]}...")
+# Debug config reading - safely get values with defaults
+dd_api_key = config.get('DEFAULT', 'datadog-api-key', fallback='')
+dd_app_key = config.get('DEFAULT', 'datadog-app-key', fallback='')
+print(f"Initializing Datadog with API key: {dd_api_key[:8] if dd_api_key else 'None'}... App key: {dd_app_key[:8] if dd_app_key else 'None'}...")
+
+# Check if Datadog is properly configured
+datadog_enabled = (DATADOG_AVAILABLE and dd_api_key and dd_app_key)
+
+if datadog_enabled:
+    try:
+        options = {
+            'api_key': dd_api_key,
+            'app_key': dd_app_key,
+            'api_host': 'https://api.us5.datadoghq.com'
+        }
+        initialize(**options)
+        print("Datadog monitoring enabled")
+    except Exception as e:
+        print(f"Failed to initialize Datadog: {e}")
+        datadog_enabled = False
+else:
+    print("Datadog monitoring disabled (missing API keys or library)")
 
 # TextMagic configuration
-textmagic_username = config['DEFAULT'].get('textmagic-username', '')
-textmagic_token = config['DEFAULT'].get('textmagic-token', '')
-textmagic_phone = config['DEFAULT'].get('textmagic-phone', '')
+textmagic_username = config.get('DEFAULT', 'textmagic-username', fallback='')
+textmagic_token = config.get('DEFAULT', 'textmagic-token', fallback='')
+textmagic_phone = config.get('DEFAULT', 'textmagic-phone', fallback='')
 textmagic_enabled = (TEXTMAGIC_AVAILABLE and textmagic_username and textmagic_token and textmagic_phone)
 
 if textmagic_enabled:
@@ -37,14 +62,6 @@ if textmagic_enabled:
     textmagic_client = TextmagicRestClient(textmagic_username, textmagic_token)
 else:
     print("TextMagic SMS notifications disabled (missing credentials or library)")
-
-options = {
-    'api_key': dd_api_key,
-    'app_key': dd_app_key,
-    'api_host': 'https://api.us5.datadoghq.com'
-}
-
-initialize(**options)
 
 def handle_ex(e, context="unknown", service="unknown", extra_tags=None):
     """
@@ -66,12 +83,13 @@ def handle_ex(e, context="unknown", service="unknown", extra_tags=None):
     if extra_tags:
         tags.extend(extra_tags)
     
-    # Track error metric
-    try:
-        print(f"Sending metric to Datadog: {service}.errors with tags {tags}")
-        statsd.increment(f'{service}.errors', tags=tags)
-    except Exception as metric_e:
-        print(f"Failed to send metric: {metric_e}")
+    # Track error metric if Datadog is enabled
+    if datadog_enabled:
+        try:
+            print(f"Sending metric to Datadog: {service}.errors with tags {tags}")
+            statsd.increment(f'{service}.errors', tags=tags)
+        except Exception as metric_e:
+            print(f"Failed to send metric: {metric_e}")
     
     # Get error details
     error_text = str(e) if isinstance(e, str) else f"{e}\n{traceback.format_exc()}"
@@ -83,18 +101,19 @@ def handle_ex(e, context="unknown", service="unknown", extra_tags=None):
         account = dict(tag.split(':') for tag in tags).get('account')
         title = f'Broker Error: {bot}/{account}'
     
-    # Send detailed event
-    try:
-        print(f"Sending event to Datadog: {title}")
-        event_response = Event.create(
-            title=title,
-            text=f'Context: {context}\n\nError:\n{error_text}',
-            alert_type='error',
-            tags=tags
-        )
-        print(f"Event response: {event_response}")
-    except Exception as event_e:
-        print(f"Failed to send event: {event_e}")
+    # Send detailed event if Datadog is enabled
+    if datadog_enabled:
+        try:
+            print(f"Sending event to Datadog: {title}")
+            event_response = Event.create(
+                title=title,
+                text=f'Context: {context}\n\nError:\n{error_text}',
+                alert_type='error',
+                tags=tags
+            )
+            print(f"Event response: {event_response}")
+        except Exception as event_e:
+            print(f"Failed to send event: {event_e}")
     
     # Send SMS notification if TextMagic is enabled
     if textmagic_enabled and 'textmagic_client' in globals():
@@ -103,8 +122,14 @@ def handle_ex(e, context="unknown", service="unknown", extra_tags=None):
         
         # Filter criteria for SMS notifications
         is_critical_error = (
-            # Connection failures are critical
-            ('failed to connect' in error_str or 'connection' in error_str and 'attempt' in error_str) or
+            # Connection failures only when related to trading
+            (('failed to connect' in error_str or ('connection' in error_str and 'attempt' in error_str)) and
+             service == 'broker' and context.startswith('trade_')) or
+            
+            # Price lookup failures
+            (service == 'broker' and
+             context.startswith('trade_') and
+             'error trying to retrieve stock price' in error_str) or
             
             # Traditional trade errors
             (service == 'broker' and

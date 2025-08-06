@@ -116,7 +116,7 @@ class broker_ibkr(broker_root):
 
             elif symbol in ['NQ', 'ES', 'MNQ', 'MES']:
                 if not forhistory:
-                    stock = Future(symbol, '20250620', 'CME')
+                    stock = Future(symbol, '20250919', 'CME')
                 else:
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CME', includeExpired=True)
                 stock.is_futures = 1
@@ -134,7 +134,7 @@ class broker_ibkr(broker_root):
 
             elif symbol in ['YM','MYM']:
                 if not forhistory:
-                    stock = Future(symbol, '20240315', 'CBOT')
+                    stock = Future(symbol, '20250919', 'CBOT')
                 else:
                     stock = Contract(symbol=symbol, secType='CONTFUT', exchange='CBOT', includeExpired=True)
                 stock.is_futures = 1
@@ -280,10 +280,32 @@ class broker_ibkr(broker_root):
         if symbol in ticker_cache and time.time() - ticker_cache[symbol]['time'] < 15:
             ticker = ticker_cache[symbol]['ticker']
         else:
-            starttimer = time.time()
-            [ticker] = self.conn.reqTickers(stock)
-            print(f"  get_price({symbol}) cache miss, took {time.time() - starttimer:.2f}s")
-            ticker_cache[symbol] = {'ticker': ticker, 'time': time.time()}
+            # Retry with exponential backoff: 1s, 2s, 4s, 8s, 16s (up to 31s total)
+            max_retries = 5
+            retry_delays = [1, 2, 4, 8, 16]
+            
+            for attempt in range(max_retries + 1):
+                try:
+                    starttimer = time.time()
+                    [ticker] = self.conn.reqTickers(stock)
+                    elapsed = time.time() - starttimer
+                    if attempt > 0:
+                        print(f"  get_price({symbol}) succeeded on attempt {attempt + 1}, took {elapsed:.2f}s")
+                    else:
+                        print(f"  get_price({symbol}) cache miss, took {elapsed:.2f}s")
+                    ticker_cache[symbol] = {'ticker': ticker, 'time': time.time()}
+                    break
+                except Exception as e:
+                    if attempt < max_retries:
+                        delay = retry_delays[attempt]
+                        print(f"  get_price({symbol}) failed on attempt {attempt + 1}: {str(e)}, retrying in {delay}s...")
+                        time.sleep(delay)
+                        # Refresh connection for next attempt
+                        self.load_conn()
+                        stock = self.get_stock(symbol)
+                    else:
+                        print(f"  get_price({symbol}) failed after {max_retries + 1} attempts: {str(e)}")
+                        raise Exception(f"Failed to get price for {symbol} after {max_retries + 1} attempts: {str(e)}")
 
         if math.isnan(ticker.last):
             if math.isnan(ticker.close):

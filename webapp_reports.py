@@ -30,7 +30,8 @@ def reports():
     return render_template('reports.html', 
                            timeframe=timeframe, 
                            all_tickers=all_tickers, 
-                           selected_tickers=selected_tickers)
+                           selected_tickers=selected_tickers,
+                           date=datetime)
 
 @app.route('/get_tickers')
 def get_tickers():

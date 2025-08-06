@@ -1,5 +1,20 @@
-# auto-trade-bot
-Trading bot that takes TradingView or other algo signals via webhook, and places those trades on Interactive Brokers or Alpaca.
+# Trading View Interactive Brokers Integration
+
+A trading bot that receives TradingView or other algorithmic trading signals via webhook, and places those trades on Interactive Brokers or Alpaca.
+
+## Overview
+
+This application consists of three main components:
+1. **Webapp**: A Flask web server that receives webhook signals from TradingView
+2. **Broker**: A service that processes trading signals and executes them on your broker(s)
+3. **Ngrok**: A tunneling service to expose your local webhook endpoint to the internet
+
+The system supports:
+- Multiple accounts (IBKR and/or Alpaca)
+- Error monitoring and alerts through Datadog
+- Critical error SMS notifications via TextMagic
+- Dashboard visualization of trading activity
+- Configurable position sizing based on percentage of account
 
 ## Demo Video:
 
@@ -21,35 +36,85 @@ https://buymeacoffee.com/parttimelarry
 
 ## Prerequisites / Installation
 
-Install redis as per https://redis.io/docs/getting-started/
-
-Install either Trader Workstation or Gateway from Interactive Brokers, at https://www.interactivebrokers.com/en/home.php (Login button)
-OR if you're going to use Alpaca, you don't need to install anything!
-
-Make sure you have Python and pip3 installed for your OS
-
-Then run this:
-
+1. Install Python 3.7+ and pip3
+2. Install required dependencies:
 ```
 pip3 install -r requirements.txt
 ```
+3. Download and install ngrok from https://ngrok.com/
+4. For Interactive Brokers:
+   - Install Trader Workstation (TWS) or IB Gateway from https://www.interactivebrokers.com/
+   - Create and fund your IB account (paper or live)
+5. For Alpaca:
+   - Create an Alpaca account and generate API keys
 
-## How to Run the Server
+## Configuration
 
-First edit config.txt tocontain your shared password and preferred subdomain, and Alpaca API keys if you're using that.
+1. Copy `config-template.ini` to `config.ini`
+2. Configure your settings:
+   - Set your `ngrok-subdomain` (requires paid ngrok account) and `signals-password`
+   - Configure Datadog API keys for monitoring (optional)
+   - Configure TextMagic credentials for SMS notifications (optional)
+   - Add your broker accounts:
+     - For IBKR: configure host and port
+     - For Alpaca: configure API keys
+   - Configure position sizing for each security and account
 
-IBKR only -- Run an access app for Interactive Brokers. Trader Workstation is a full trading interface with graphs and stuff, and the Gateway is just the API with a small screen to show the logs. Either of these will work. Download either one at https://www.interactivebrokers.com/en/home.php when you click on the Log In button. 
+Example configuration for accounts:
+```ini
+[U8438939]
+# Steve margin account
+driver = ibkr
+host = 127.0.0.1
+port = 7496
+use-futures = yes
+SOXL-pct = 70  # use 70% of account size for SOXL
+TQQQ-pct = 20  # use 20% of account size for TQQQ
+default-pct = 0  # default for unspecified securities
 
-IBKR only -- Then log into whichever mode of whichever IB app you want (paper vs live, TW vs Gateway), and turn on "ActiveX and Socket Clients", turn off "Read Only API", and accept the warnings.
-
-Then, on three terminals, run the three start scripts. One is for the web API, the second is for the broker command processor, and the third is to start up ngrok. IBKR and Alpaca have their own broker start scripts.
-
-Then set up a Tradingview alert to hit your webhook, and use the message below! Make sure to change the password to match.
-
-
-## Sample Webhook Message
-
+[PA3I5VZDCGPF]
+# Paper trading on Alpaca
+driver = alpaca
+key = YOUR_ALPACA_KEY
+secret = YOUR_ALPACA_SECRET
+paper = yes
+use-futures = no
+SOXL-pct = 50
+default-pct = 0
 ```
+
+## Starting the Services
+
+Run each of these commands in separate terminal windows:
+
+1. Start the web server:
+   ```
+   ./start-webapp.sh  # For Unix/Mac
+   start-webapp.bat   # For Windows
+   ```
+
+2. Start the broker service:
+   ```
+   ./start-broker.sh  # For Unix/Mac
+   ```
+
+3. Start ngrok to expose your webhook:
+   ```
+   ./start-ngrok.sh  # For Unix/Mac
+   ```
+
+If using Interactive Brokers:
+- Open TWS or IB Gateway and log in
+- In settings, enable "ActiveX and Socket Clients" and disable "Read Only API"
+- Accept any API connection warnings
+
+## TradingView Alert Setup
+
+1. Create a new alert in TradingView
+2. Set the webhook URL to: `https://YOUR-SUBDOMAIN.ngrok.io/webhook`
+3. Configure the alert message using this template:
+
+```json
 {
 	"time": "{{timenow}}",
 	"exchange": "{{exchange}}",
@@ -63,6 +128,7 @@ Then set up a Tradingview alert to hit your webhook, and use the message below! 
 		"volume": {{volume}}
 	},
 	"strategy": {
+        "bot": "live",
 		"position:size": {{strategy.position_size}},
 		"order_action": "{{strategy.order.action}}",
 		"order_contracts": {{strategy.order.contracts}},
@@ -75,25 +141,58 @@ Then set up a Tradingview alert to hit your webhook, and use the message below! 
 	},
 	"passphrase": "YOUR-SIGNALS-PASSWORD"
 }
-
 ```
 
-Make sure to send this to https://yoursubdomain.ngrok.com/webhook in the Tradingview alert configuration (note the /webhook part)
+Replace `YOUR-SIGNALS-PASSWORD` with the value from your config.ini.
 
-## Watchouts
+## Monitoring and Notifications
 
-Here are some common issues to watch out for, both in setup and operations
+### Dashboard
+Access the dashboard at: `http://localhost:6008/dashboard`
 
-* IBKR -- Your TW or Gateway login will be finicky. Prepare to do a bit of babysitting. This won't be 100% set and forget.
-	* If you log in to your IB account somewhere else, TW/GW will be logged out and you have to fix that.
-	* TW has a daily restart that you can't avoid.
-* The script doesn't convert from "shorting a long ETF" to "going long on a short ETF". So for e.g. if the TV strategy wants to short SOXL, then it will short SOXL rather than buying SOXS. There's a good chance this is actually higher performance anyway.
-* The script looks at the position balance in your IB account, so you can't run more than one algorithm on the same security.
-* Set your TV alerts to send to your phone and email as well as the bot. The email is helpful because it's the full signal, and you can use a tool like Insomnia to resend the message if it failed to get in.
-* If the buy signal doesn't get through, it will currently go the opposite way later on when it tries to sell out. Best option is to force the correct balance in your broker interface or via Insomnia.
+### Datadog Integration
+If configured, the application will:
+- Send error metrics and events to Datadog
+- Monitor service health
 
+### SMS Notifications
+If TextMagic is configured, the system will send SMS alerts for:
+- Critical trade execution errors
+- Connection failures during trade operations
 
+## Troubleshooting
 
+Common issues:
+
+- **Connection issues**: IBKR may disconnect if you log in elsewhere or during TWS's daily restart
+- **Signal not received**: Ensure your ngrok tunnel is running and check the logs
+- **Trade not executed**: Verify that:
+  - The passphrase matches your config.ini
+  - Your broker account has sufficient funds
+  - IBKR API connections are enabled
+  - Check the logs in the broker terminal
+
+If a trade fails:
+- Monitor the dashboard for error messages
+- Check email alerts from TradingView (if configured)
+- Use the logs to diagnose the issue
+
+## Testing
+
+Run unit tests with:
+```
+./run-unittests.sh
+```
+
+For specific test suites:
+```
+./run-unittests-broker.sh
+./run-unittests-webapp.sh
+```
+
+## License
+
+This software is freely available for use and modification.
 
 ## References, Tools, and Libraries Used:
 
