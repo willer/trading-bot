@@ -1,6 +1,5 @@
 import time
-import psycopg2
-from psycopg2 import pool
+import sqlite3
 import redis, json
 import asyncio, datetime
 import sys
@@ -29,29 +28,21 @@ config = configparser.ConfigParser()
 config.read('config.ini')
 
 
-# Replace SQLite connection pool with PostgreSQL connection pool
-db_pool = psycopg2.pool.SimpleConnectionPool(
-    1, 20,
-    host=config['database']['database-host'],
-    port=config['database']['database-port'],
-    dbname=config['database']['database-name'],
-    user=config['database']['database-user'],
-    password=config['database']['database-password']
-)
-
+# SQLite connection (simpler than PostgreSQL)
 dbconn = None
 def get_db():
     global dbconn
     if dbconn is None:
-        dbconn = db_pool.getconn()
+        dbconn = sqlite3.connect('trade.db')
+        dbconn.row_factory = sqlite3.Row  # Enable column access by name
     return dbconn
 
 def update_signal(id, data_dict):
     db = get_db()
     sql = "UPDATE signals SET "
     for key, value in data_dict.items():
-        sql += f"{key} = %s, "
-    sql = sql[:-2] + " WHERE id = %s"
+        sql += f"{key} = ?, "
+    sql = sql[:-2] + " WHERE id = ?"
     cursor = db.cursor()
     cursor.execute(sql, tuple(data_dict.values()) + (id,))
     db.commit()

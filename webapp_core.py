@@ -1,9 +1,9 @@
 import configparser
-import psycopg2
+import sqlite3
 from flask import Flask, g, json, session
 from flask_sqlalchemy import SQLAlchemy
 import redis
-from psycopg2 import pool
+# # SQLite doesn't need connection pooling  # Not needed for SQLite
 import datetime
 from datetime import timedelta
 import asyncio
@@ -24,20 +24,12 @@ p = r.pubsub()
 p.subscribe('health')
 p.get_message(timeout=3)
 
-# Replace SQLite connection pool with PostgreSQL connection pool
-db_pool = psycopg2.pool.SimpleConnectionPool(
-    1, 20,
-    host=config['database']['database-host'],
-    port=config['database']['database-port'],
-    dbname=config['database']['database-name'],
-    user=config['database']['database-user'],
-    password=config['database']['database-password']
-)
-
+# SQLite connection (simpler than PostgreSQL)
 def get_db():
     try:
         if 'db' not in g:
-            g.db = db_pool.getconn()
+            g.db = sqlite3.connect('trade.db')
+            g.db.row_factory = sqlite3.Row
         return g.db
     except Exception as e:
         handle_ex(e, context="database_connection", service="webapp", extra_tags=['component:core'])
@@ -48,7 +40,7 @@ def close_db(error):
     try:
         db = g.pop('db', None)
         if db is not None:
-            db_pool.putconn(db)
+            db.close()
     except Exception as e:
         handle_ex(e, context="database_cleanup", service="webapp", extra_tags=['component:core'])
         raise
@@ -83,7 +75,7 @@ def get_signal(id):
     try:
         db = get_db()
         cursor = db.cursor()
-        cursor.execute("SELECT * FROM signals WHERE id = %s", (id,))
+        cursor.execute("SELECT * FROM signals WHERE id = ?", (id,))
         signal = cursor.fetchone()
 
         if signal:
@@ -103,8 +95,8 @@ def update_signal(id, data_dict):
         db = get_db()
         sql = "UPDATE signals SET "
         for key, value in data_dict.items():
-            sql += f"{key} = %s, "
-        sql = sql[:-2] + " WHERE id = %s"
+            sql += f"{key} = ?, "
+        sql = sql[:-2] + " WHERE id = ?"
         cursor = db.cursor()
         cursor.execute(sql, tuple(data_dict.values()) + (id,))
         db.commit()
@@ -135,11 +127,11 @@ def should_skip_flat_signal(data_dict):
             opposite_position = 'short' if prev_position == 'long' else 'long'
             cursor.execute("""
                 SELECT * FROM signals 
-                WHERE ticker = %s 
-                AND bot = %s 
-                AND market_position = %s
-                AND timestamp > %s - INTERVAL '15 seconds'
-                AND timestamp <= %s
+                WHERE ticker = ? 
+                AND bot = ? 
+                AND market_position = ?
+                AND timestamp > ? - INTERVAL '15 seconds'
+                AND timestamp <= ?
                 ORDER BY timestamp DESC
                 LIMIT 1
             """, (
@@ -157,11 +149,11 @@ def should_skip_flat_signal(data_dict):
         # Second check: Look for any recent non-flat signals (original check)
         cursor.execute("""
             SELECT * FROM signals 
-            WHERE ticker = %s 
-            AND bot = %s 
+            WHERE ticker = ? 
+            AND bot = ? 
             AND market_position != 'flat'
-            AND timestamp > %s - INTERVAL '2 minutes'
-            AND timestamp <= %s
+            AND timestamp > ? - INTERVAL '2 minutes'
+            AND timestamp <= ?
             ORDER BY timestamp DESC
             LIMIT 1
         """, (
@@ -190,7 +182,7 @@ def schedule_signal_retry(data_dict, delay_seconds=30):
         cursor.execute("""
             INSERT INTO signal_retries 
             (original_signal_id, retry_time, signal_data, retries_remaining)
-            VALUES (%s, %s, %s, %s)
+            VALUES (?, ?, ?, ?)
         """, (data_dict['strategy'].get('id'), retry_time, json.dumps(data_dict), 1))
         db.commit()
     except Exception as e:
@@ -227,7 +219,7 @@ def process_signal_retries():
             key = f"{ticker}_{bot}"
             
             # Get the original signal's timestamp from the database
-            cursor.execute("SELECT timestamp FROM signals WHERE id = %s", (original_signal_id,))
+            cursor.execute("SELECT timestamp FROM signals WHERE id = ?", (original_signal_id,))
             result = cursor.fetchone()
             if not result:
                 continue
@@ -253,7 +245,7 @@ def process_signal_retries():
                 # Use the original signal timestamp, not the retry time
                 if signal_dict['strategy'].get('market_position', '') == 'flat':
                     # Get original timestamp of this signal
-                    cursor.execute("SELECT timestamp FROM signals WHERE id = %s", (original_signal_id,))
+                    cursor.execute("SELECT timestamp FROM signals WHERE id = ?", (original_signal_id,))
                     original_timestamp_result = cursor.fetchone()
                     if not original_timestamp_result:
                         continue
@@ -262,10 +254,10 @@ def process_signal_retries():
                     
                     cursor.execute("""
                         SELECT * FROM signals 
-                        WHERE ticker = %s 
-                        AND bot = %s 
+                        WHERE ticker = ? 
+                        AND bot = ? 
                         AND market_position IN ('long', 'short')
-                        AND timestamp BETWEEN %s - INTERVAL '10 seconds' AND %s + INTERVAL '10 seconds'
+                        AND timestamp BETWEEN ? - INTERVAL '10 seconds' AND ? + INTERVAL '10 seconds'
                         LIMIT 1
                     """, (
                         signal_dict['ticker'], 
@@ -276,7 +268,7 @@ def process_signal_retries():
                     
                     if cursor.fetchone():
                         app.logger.info(f"Skipping flat signal due to nearby directional signal")
-                        cursor.execute("UPDATE signal_retries SET retries_remaining = 0 WHERE id = %s", (retry_id,))
+                        cursor.execute("UPDATE signal_retries SET retries_remaining = 0 WHERE id = ?", (retry_id,))
                         db.commit()
                         continue
                 
@@ -292,7 +284,7 @@ def process_signal_retries():
                 cursor.execute("""
                     UPDATE signal_retries 
                     SET retries_remaining = retries_remaining - 1
-                    WHERE id = %s
+                    WHERE id = ?
                 """, (retry_id,))
                 
                 # Mark ALL older signal retries for this ticker/bot as completed (0 retries)
@@ -301,11 +293,11 @@ def process_signal_retries():
                     SET retries_remaining = 0
                     FROM signals s
                     WHERE sr.original_signal_id = s.id
-                    AND s.ticker = %s
-                    AND s.bot = %s
-                    AND s.timestamp < %s
+                    AND s.ticker = ?
+                    AND s.bot = ?
+                    AND s.timestamp < ?
                     AND sr.retries_remaining > 0
-                    AND sr.id != %s
+                    AND sr.id != ?
                 """, (signal_dict['ticker'], signal_dict['strategy'].get('bot', ''), data['timestamp'], retry_id))
                 
             except Exception as e:
@@ -380,8 +372,8 @@ def save_signal(data_dict):
             cursor.execute("""
                 WITH recent_flat AS (
                     SELECT id FROM signals 
-                    WHERE ticker = %s 
-                    AND bot = %s 
+                    WHERE ticker = ? 
+                    AND bot = ? 
                     AND market_position = 'flat'
                     AND timestamp > NOW() - INTERVAL '15 seconds'
                 )
@@ -403,8 +395,8 @@ def save_signal(data_dict):
             SET retries_remaining = 0
             FROM signals s
             WHERE sr.original_signal_id = s.id
-            AND s.ticker = %s
-            AND s.bot = %s
+            AND s.ticker = ?
+            AND s.bot = ?
             AND sr.retry_time > NOW()
         """, (
             data_dict['ticker'],
@@ -417,7 +409,7 @@ def save_signal(data_dict):
             INSERT INTO signals 
             (ticker, bot, order_action, order_contracts, market_position, 
              market_position_size, order_price, order_message, position_pct) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id
         """, (data_dict['ticker'],
               data_dict['strategy'].get('bot', ''),
@@ -439,7 +431,7 @@ def save_signal(data_dict):
         cursor.execute("""
             INSERT INTO signal_retries 
             (original_signal_id, retry_time, signal_data, retries_remaining)
-            VALUES (%s, %s, %s, %s)
+            VALUES (?, ?, ?, ?)
         """, (id, initial_retry_time, json.dumps(data_dict), 1))
         
         # Schedule verification retry
@@ -448,7 +440,7 @@ def save_signal(data_dict):
         cursor.execute("""
             INSERT INTO signal_retries 
             (original_signal_id, retry_time, signal_data, retries_remaining)
-            VALUES (%s, %s, %s, %s)
+            VALUES (?, ?, ?, ?)
         """, (id, verification_retry_time, json.dumps(verification_data), 1))
         
         db.commit()

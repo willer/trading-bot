@@ -3,7 +3,7 @@ import datetime
 import json
 import os
 import tempfile
-import psycopg2
+import sqlite3
 import configparser
 from unittest.mock import patch, MagicMock, call
 from flask import Flask
@@ -165,7 +165,7 @@ class TestWebappSignalProcessing(unittest.TestCase):
         
         # Verify that the signal was marked as completed (retries_remaining=0)
         self.mock_cursor.execute.assert_any_call(
-            "UPDATE signal_retries SET retries_remaining = 0 WHERE id = %s", 
+            "UPDATE signal_retries SET retries_remaining = 0 WHERE id = ?", 
             (101,)
         )
         
@@ -253,7 +253,7 @@ class TestWebappSignalProcessing(unittest.TestCase):
         
         # Verify that the signal was marked as completed (retries_remaining=0)
         self.mock_cursor.execute.assert_any_call(
-            "UPDATE signal_retries SET retries_remaining = 0 WHERE id = %s", 
+            "UPDATE signal_retries SET retries_remaining = 0 WHERE id = ?", 
             (102,)
         )
         
@@ -298,7 +298,7 @@ class TestWebappSignalProcessing(unittest.TestCase):
         
         # Verify that the signal was marked as completed (retries_remaining=0)
         self.mock_cursor.execute.assert_any_call(
-            "UPDATE signal_retries SET retries_remaining = 0 WHERE id = %s", 
+            "UPDATE signal_retries SET retries_remaining = 0 WHERE id = ?", 
             (102,)
         )
         
@@ -397,7 +397,7 @@ class TestWebappSignalProcessing(unittest.TestCase):
             INSERT INTO signals 
             (ticker, bot, order_action, order_contracts, market_position, 
              market_position_size, order_price, order_message, position_pct) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id
         """, 
             unittest.mock.ANY  # Don't validate the exact args since timestamps vary

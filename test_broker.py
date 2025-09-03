@@ -12,7 +12,7 @@ original_argv = sys.argv
 sys.argv = ['broker.py', 'test']
 
 # Create a patch for psycopg2 pool to avoid database connection
-psycopg2_patch = patch('psycopg2.pool.SimpleConnectionPool')
+psycopg2_patch = patch('sqlite3.connect')
 mock_pool = psycopg2_patch.start()
 
 # Patch Redis

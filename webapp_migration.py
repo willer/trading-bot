@@ -1,8 +1,8 @@
-import psycopg2
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+import sqlite3
+# SQLite autocommits by default
 import sqlite3
 from webapp_core import config
-from psycopg2 import pool
+# # SQLite doesn't need connection pooling  # Not needed for SQLite
 
 def create_postgres_db():
     conn = psycopg2.connect(
@@ -144,7 +144,7 @@ def migrate_data():
         for row in rows:
             pg_cur.execute("""
                 INSERT INTO signals (timestamp, ticker, bot, order_action, order_contracts, market_position, market_position_size, order_price, order_message)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, row)
         
         pg_conn.commit()
