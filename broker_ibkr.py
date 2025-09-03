@@ -108,8 +108,9 @@ class broker_ibkr(broker_root):
                 pass
 
             elif symbol in ['SOXL','SOXS']:
-                stock = Stock(symbol, 'ARCA', 'USD')
-                #stock = Stock(symbol, 'SMART', 'USD')
+                # Use SMART routing for better reliability
+                stock = Stock(symbol, 'SMART', 'USD')
+                #stock = Stock(symbol, 'ARCA', 'USD')
                 stock.is_futures = 0
                 stock.round_precision = 100
                 stock.market_order = False
@@ -300,11 +301,29 @@ class broker_ibkr(broker_root):
                         delay = retry_delays[attempt]
                         print(f"  get_price({symbol}) failed on attempt {attempt + 1}: {str(e)}, retrying in {delay}s...")
                         time.sleep(delay)
+                        # Force reconnection on repeated failures
+                        if attempt >= 2:
+                            print(f"  Forcing reconnection after {attempt + 1} failures")
+                            try:
+                                self.conn.disconnect()
+                            except:
+                                pass
+                            self.conn = None
+                            # Clear the cache to force fresh connection
+                            ibcachekey = f"{self.aconfig['host']}:{self.aconfig['port']}"
+                            if ibcachekey in ibconn_cache:
+                                del ibconn_cache[ibcachekey]
                         # Refresh connection for next attempt
                         self.load_conn()
                         stock = self.get_stock(symbol)
                     else:
                         print(f"  get_price({symbol}) failed after {max_retries + 1} attempts: {str(e)}")
+                        # Send critical error notification
+                        from core_error import handle_ex
+                        handle_ex(f"Failed to get price for {symbol}: {str(e)}", 
+                                context=f"trade_price_fetch_{symbol}", 
+                                service="broker",
+                                extra_tags=[f'symbol:{symbol}', f'account:{self.account}'])
                         raise Exception(f"Failed to get price for {symbol} after {max_retries + 1} attempts: {str(e)}")
 
         if math.isnan(ticker.last):
