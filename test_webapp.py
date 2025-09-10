@@ -385,8 +385,8 @@ class TestWebappSignalProcessing(unittest.TestCase):
     
     def test_save_signal_schedules_retry(self):
         """Test that save_signal schedules a retry for a signal"""
-        # Mock cursor fetchone for the INSERT...RETURNING
-        self.mock_cursor.fetchone.return_value = [999]  # Signal ID
+        # Mock cursor lastrowid for SQLite INSERT
+        self.mock_cursor.lastrowid = 999  # Signal ID
         
         # Call the function under test with a directional signal
         webapp_core.save_signal(self.test_signal_data)
@@ -398,7 +398,6 @@ class TestWebappSignalProcessing(unittest.TestCase):
             (ticker, bot, order_action, order_contracts, market_position, 
              market_position_size, order_price, order_message, position_pct) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING id
         """, 
             unittest.mock.ANY  # Don't validate the exact args since timestamps vary
         )

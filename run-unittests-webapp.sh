@@ -6,7 +6,7 @@
 export PYTHONPATH=$(pwd):$PYTHONPATH
 
 echo "Running webapp unit tests..."
-python -m unittest test_webapp.py
+.venv/bin/python -m unittest test_webapp.py
 
 # Check the exit code
 if [ $? -eq 0 ]; then

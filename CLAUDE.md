@@ -1,8 +1,8 @@
 # CLAUDE.md - Guidelines for the tradingview-interactive-brokers project
 
 ## Build & Run Commands
-- Run webapp: `python -m flask run --host=0.0.0.0 --port=6008`  
-- Run broker: `python -u broker.py live`
+- Run webapp: `./start-webapp.sh` (uses Gunicorn production server)
+- Run broker: `./start-broker.sh`
 - Test error handling: `python test-error.py`
 - Run unit tests: 
   - All tests: `./run-unittests.sh` or `run-unittests.bat` on Windows
@@ -45,6 +45,8 @@
 - **core_error.py**: Centralized error handling including Datadog integration
 
 ## Recent Important Fixes
+- September 5, 2025: Switched from Flask dev server to Gunicorn production server to fix APScheduler compatibility issues on macOS. Added immediate publish for directional signals to bypass scheduler dependencies.
+- September 4, 2025: Completed PostgreSQL to SQLite migration, fixing timestamp handling and SQL syntax compatibility issues.
 - March 25, 2025: Fixed position percentage scaling in broker.py to properly scale signal percentages by configured percentages for futures trading.
 - March 5, 2025: Fixed signal deduplication in webapp_core.py to use original signal timestamp (not processing time) and expanded window from 3 to 10 seconds to properly skip flat signals after a directional change.
 - March 5, 2025: Added comprehensive test coverage for webapp signal processing and broker trade execution.

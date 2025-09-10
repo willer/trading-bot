@@ -26,11 +26,13 @@ mkdir -p logs
 # Rotate logs if needed
 rotate_logs
 
-# Set up Flask environment
-export FLASK_APP=webapp
-export FLASK_ENV=development
-export FLASK_DEBUG=1
+# Set up Python environment
 export PYTHONPATH=.
+
+# Activate virtual environment if it exists
+if [ -f .venv/bin/activate ]; then
+    . .venv/bin/activate
+fi
 
 # Find Python executable
 py=`which python`
@@ -47,8 +49,8 @@ while true; do
 
     echo "Starting webapp..." | tee -a "$logfile"
     
-    # Start Flask with monitoring (with proper quoting)
-    dd_monitor_cmd "webapp" '"'"$py"'" -m flask run --host=0.0.0.0 --port=6008' 2>&1 | tee -a "$logfile"
+    # Start Gunicorn with monitoring (with proper quoting)
+    dd_monitor_cmd "webapp" '"'"$py"'" -m gunicorn --bind 0.0.0.0:6008 --workers 1 --threads 2 --timeout 120 --access-logfile - webapp:app' 2>&1 | tee -a "$logfile"
     
     exit_code=$?
     if [ $exit_code -ne 0 ]; then

@@ -7,6 +7,7 @@ import redis
 import datetime
 from datetime import timedelta
 import asyncio
+import pytz
 from core_error import handle_ex
 
 app = Flask(__name__)
@@ -23,6 +24,37 @@ r = redis.Redis(host='localhost', port=6379, db=0)
 p = r.pubsub()
 p.subscribe('health')
 p.get_message(timeout=3)
+
+# Eastern timezone for display purposes
+EASTERN = pytz.timezone('US/Eastern')
+
+def to_eastern_time(timestamp_input):
+    """Convert timestamp to Eastern time for display, handling mixed database formats"""
+    if isinstance(timestamp_input, str):
+        # Parse string timestamp
+        dt = datetime.datetime.fromisoformat(timestamp_input.replace('Z', '+00:00'))
+    else:
+        dt = timestamp_input
+    
+    # If it has timezone info, convert to Eastern
+    if dt.tzinfo is not None:
+        return dt.astimezone(EASTERN)
+    
+    # For naive timestamps, detect format based on server migration cutoff
+    # Migration from Windows (Eastern) to Mac (UTC) happened at '2025-09-04 20:44:23'
+    cutoff_timestamp = datetime.datetime(2025, 9, 4, 20, 44, 23)
+    
+    if dt < cutoff_timestamp:
+        # Old format: already stored as Eastern time, just add timezone info
+        return EASTERN.localize(dt, is_dst=None)
+    else:
+        # New format: stored as UTC, convert to Eastern
+        utc_dt = pytz.UTC.localize(dt)
+        return utc_dt.astimezone(EASTERN)
+
+def eastern_now():
+    """Get current time in Eastern timezone"""
+    return datetime.datetime.now(EASTERN)
 
 # SQLite connection (simpler than PostgreSQL)
 def get_db():
@@ -62,9 +94,15 @@ def get_signals():
         column_names = [desc[0] for desc in cursor.description]
         signals = [dict(zip(column_names, signal)) for signal in signals]
 
-        # Take out fractional seconds from timestamp
+        # Convert timestamps to Eastern time for display
         for signal in signals:
-            signal['timestamp'] = signal['timestamp'].replace(microsecond=0)
+            if signal['timestamp']:
+                # Convert timestamp to Eastern time using intelligent detection
+                signal['timestamp'] = to_eastern_time(signal['timestamp'])
+            
+            if signal.get('processed'):
+                # Convert processed timestamp to Eastern time
+                signal['processed'] = to_eastern_time(signal['processed'])
 
         return signals
     except Exception as e:
@@ -130,7 +168,7 @@ def should_skip_flat_signal(data_dict):
                 WHERE ticker = ? 
                 AND bot = ? 
                 AND market_position = ?
-                AND timestamp > ? - INTERVAL '15 seconds'
+                AND timestamp > datetime(?, '-15 seconds')
                 AND timestamp <= ?
                 ORDER BY timestamp DESC
                 LIMIT 1
@@ -152,7 +190,7 @@ def should_skip_flat_signal(data_dict):
             WHERE ticker = ? 
             AND bot = ? 
             AND market_position != 'flat'
-            AND timestamp > ? - INTERVAL '2 minutes'
+            AND timestamp > datetime(?, '-2 minutes')
             AND timestamp <= ?
             ORDER BY timestamp DESC
             LIMIT 1
@@ -199,8 +237,8 @@ def process_signal_retries():
         cursor.execute("""
             SELECT id, signal_data, retries_remaining, original_signal_id, retry_time
             FROM signal_retries 
-            WHERE retry_time <= NOW() 
-            AND retry_time >= NOW() - INTERVAL '3 minutes'
+            WHERE retry_time <= datetime('now') 
+            AND retry_time >= datetime('now', '-3 minutes')
             AND retries_remaining > 0
         """)
         
@@ -257,7 +295,7 @@ def process_signal_retries():
                         WHERE ticker = ? 
                         AND bot = ? 
                         AND market_position IN ('long', 'short')
-                        AND timestamp BETWEEN ? - INTERVAL '10 seconds' AND ? + INTERVAL '10 seconds'
+                        AND timestamp BETWEEN datetime(?, '-10 seconds') AND datetime(?, '+10 seconds')
                         LIMIT 1
                     """, (
                         signal_dict['ticker'], 
@@ -375,12 +413,12 @@ def save_signal(data_dict):
                     WHERE ticker = ? 
                     AND bot = ? 
                     AND market_position = 'flat'
-                    AND timestamp > NOW() - INTERVAL '15 seconds'
+                    AND timestamp > datetime('now', '-15 seconds')
                 )
                 UPDATE signal_retries 
                 SET retries_remaining = 0
                 WHERE original_signal_id IN (SELECT id FROM recent_flat)
-                AND retry_time > NOW()
+                AND retry_time > datetime('now')
             """, (
                 data_dict['ticker'],
                 data_dict['strategy'].get('bot', '')
@@ -391,13 +429,13 @@ def save_signal(data_dict):
         # Cancel all pending verification retries for this ticker/bot combination
         # This ensures that if we get multiple signals in quick succession, only the most recent one will be verified
         cursor.execute("""
-            UPDATE signal_retries sr
+            UPDATE signal_retries
             SET retries_remaining = 0
-            FROM signals s
-            WHERE sr.original_signal_id = s.id
-            AND s.ticker = ?
-            AND s.bot = ?
-            AND sr.retry_time > NOW()
+            WHERE original_signal_id IN (
+                SELECT id FROM signals
+                WHERE ticker = ? AND bot = ?
+            )
+            AND retry_time > datetime('now')
         """, (
             data_dict['ticker'],
             data_dict['strategy'].get('bot', '')
@@ -410,7 +448,6 @@ def save_signal(data_dict):
             (ticker, bot, order_action, order_contracts, market_position, 
              market_position_size, order_price, order_message, position_pct) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING id
         """, (data_dict['ticker'],
               data_dict['strategy'].get('bot', ''),
               data_dict['strategy'].get('order_action', ''),
@@ -420,8 +457,8 @@ def save_signal(data_dict):
               data_dict['strategy'].get('order_price', ''),
               json.dumps(data_dict),
               data_dict['strategy'].get('position_pct')))
+        id = cursor.lastrowid
         db.commit()
-        id = cursor.fetchone()[0]
         app.logger.info(f"Signal recorded with ID: {id}")
         
         # Add the signal ID to the data
@@ -445,6 +482,18 @@ def save_signal(data_dict):
         
         db.commit()
         app.logger.info(f"Signal scheduled for initial processing at {initial_retry_time} and verification at {verification_retry_time}")
+        
+        # Immediately publish directional signals to Redis
+        if is_directional:
+            signal_data = {
+                'id': id,
+                'ticker': data_dict['ticker'],
+                'strategy': data_dict['strategy'],
+                'timestamp': data_dict.get('timestamp', datetime.datetime.now().isoformat()),
+                'is_retry': False
+            }
+            app.logger.info(f"Publishing directional signal immediately: {json.dumps(signal_data, default=str)}")
+            r.publish('tradingview', json.dumps(signal_data, default=str))
 
     except Exception as e:
         handle_ex(e, context="save_signal", service="webapp", extra_tags=['component:core'])

@@ -3,7 +3,7 @@ import hashlib
 import os
 import random
 from flask import json, redirect, render_template, request, url_for
-from webapp_core import app, get_db, get_signal, get_signals, is_logged_in, save_signal, r
+from webapp_core import app, get_db, get_signal, get_signals, is_logged_in, save_signal, r, eastern_now
 from datetime import datetime, time as dt_time
 
 @app.route('/dashboard')
@@ -15,7 +15,7 @@ def dashboard():
     if not is_logged_in():
         return redirect(url_for('login'))
     signals = get_signals()
-    return render_template('dashboard.html', signals=signals, hashlib=hashlib, date=datetime)
+    return render_template('dashboard.html', signals=signals, hashlib=hashlib, current_time=eastern_now())
 
 def is_dangerous_time():
     now = datetime.now().time()

@@ -8,3 +8,7 @@ pandas
 plotly
 ddtrace>=1.0.0
 datadog>=0.45.0
+flask_sqlalchemy
+textmagic
+flask_apscheduler
+gunicorn

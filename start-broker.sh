@@ -26,6 +26,11 @@ mkdir -p logs
 # Rotate logs if needed
 rotate_logs
 
+# Activate virtual environment if it exists
+if [ -f .venv/bin/activate ]; then
+    . .venv/bin/activate
+fi
+
 # Find Python executable
 py=`which python`
 if [ -z "$py" ]; then py=`which python3`; fi
